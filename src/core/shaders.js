@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 
 /** Uniforms shared by every patched material (time, wind, player position). */
+/** The soft anime light ramp the whole environment shares (patchMaterial opts.ramp). */
+export const ENV_RAMP = { mid: 0.02, soft: 0.32, shadow: [0.6, 0.66, 0.88] };
+
 export const globalUniforms = {
   uTime: { value: 0 },
   uWind: { value: 1 },
@@ -40,6 +43,8 @@ vec2 lsWind(vec2 p) {
  * opts.glow        { color, strength } emissive mask from the `_glow` attribute
  * opts.glowFromColor  use the vertex colour as the glow colour
  * opts.rim         { color, strength, power } fresnel rim light
+ * opts.ramp        { mid, soft, shadow: [r, g, b] } soft anime light ramp for physical materials: direct
+ *                  light falls off through a two-tone band, the dark side tinted cool (matches Mori)
  * opts.inject      { uniforms, head, color, roughness, lights, output } extra GLSL: declarations, then
  *                  blocks run after the colour, roughness and lighting chunks and before the final output
  * Returns the per-material uniforms so callers can animate them.
@@ -101,6 +106,16 @@ export function patchMaterial(material, opts = {}) {
         '#include <color_fragment>',
         `#include <color_fragment>\n{ vec3 q = vLsWorld * vec3(${sx.toFixed(3)}, ${sy.toFixed(3)}, ${sz.toFixed(3)}); float n = lsNoise(q) * 0.6 + lsNoise(q * 3.1 + 7.0) * 0.4; diffuseColor.rgb *= mix(${(1 - amt).toFixed(3)}, ${(1 + amt).toFixed(3)}, n); }`,
       );
+    }
+    if (opts.ramp) {
+      const { mid = 0.0, soft = 0.3, shadow = [0.62, 0.66, 0.86] } = opts.ramp;
+      fs = fs.replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
+        void RE_Direct_Ramp( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
+          float lit = smoothstep( ${(mid - soft).toFixed(3)}, ${(mid + soft).toFixed(3)}, dot( geometryNormal, directLight.direction ) );
+          reflectedLight.directDiffuse += directLight.color * mix( vec3( ${shadow.map((v) => v.toFixed(3)).join(', ')} ), vec3( 1.0 ), lit ) * BRDF_Lambert( material.diffuseColor );
+        }
+        #undef RE_Direct
+        #define RE_Direct RE_Direct_Ramp`);
     }
     const inj = opts.inject;
     if (inj) {

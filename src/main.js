@@ -87,6 +87,7 @@ async function boot() {
   // long and creep back up when there's headroom, so slower machines stay smooth
   let resScale = 1, quality = settings.quality, perfTime = 0, perfFrames = 0, perfSum = 0;
   const applyResolution = () => {
+    if (innerWidth < 1 || innerHeight < 1) return; // hidden window: keep the last good size
     renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_RATIO[quality] ?? 1) * resScale);
     renderer.setSize(innerWidth, innerHeight);
     post.setSize(innerWidth, innerHeight);
@@ -273,13 +274,15 @@ async function boot() {
     let near = null;
     for (const it of world.interactables) {
       const d = it.position.distanceTo(player.position);
-      if (d < 2.0 && (!near || d < near.d)) near = { ...it, d };
+      const reach = it.key === 'shrine' ? 2.8 : 2.0; // shrine stones are big: talk to them from a step back
+      if (d < reach && (!near || d < near.d)) near = { ...it, d };
     }
     const deer = wildlife.nearestGreetable(player.position);
-    if (deer && (!near || deer.d < near.d) && player.speed < 3.6) near = deer;
+    if (deer && !near && player.speed < 3.6) near = deer; // a shrine or seat close by comes first
     if (near && canAct()) {
       promptPos.copy(near.position).add({ x: 0, y: 0.9, z: 0 }).project(camera);
-      ui.showPrompt(promptPos.z < 1 ? { x: (promptPos.x * 0.5 + 0.5) * innerWidth, y: (-promptPos.y * 0.5 + 0.5) * innerHeight } : null, near.label);
+      const label = near.key === 'shrine' ? (near.shrine.woken ? 'The shrine is awake' : mori.name === 'spirit' ? near.label : 'Only spirit Mori can wake this (1)') : near.label;
+      ui.showPrompt(promptPos.z < 1 ? { x: (promptPos.x * 0.5 + 0.5) * innerWidth, y: (-promptPos.y * 0.5 + 0.5) * innerHeight } : null, label);
       const pressed = input.consumeInteract();
       if (pressed && near.key === 'greet') {
         const first = wildlife.greet(near.deer, player.position);
@@ -335,6 +338,7 @@ async function boot() {
     audio.update(dt, t, Math.min(streamDistance(player.position.x, player.position.z), fallsDist * 0.35));
     ui.update(dt, player.speed > 0.5);
 
+    fitView();
     post.render();
     adaptResolution(timer.getDelta() || dt);
 
@@ -344,12 +348,18 @@ async function boot() {
   }
   requestAnimationFrame(frame);
 
-  addEventListener('resize', () => {
-    camera.aspect = innerWidth / innerHeight;
+  // a hidden or minimised window can report 0 x 0: an aspect of 0 / 0 would leave the camera's projection
+  // NaN and every later frame black, so zero sizes are skipped and each frame re-checks the fit
+  function fitView() {
+    if (innerWidth < 1 || innerHeight < 1) return;
+    const aspect = innerWidth / innerHeight;
+    if (Number.isFinite(camera.aspect) && Math.abs(camera.aspect - aspect) < 1e-4) return;
+    camera.aspect = aspect;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
     post.setSize(innerWidth, innerHeight);
-  });
+  }
+  addEventListener('resize', fitView);
   addEventListener('pagehide', save);
 
   if (import.meta.env.DEV) {

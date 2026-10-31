@@ -15,13 +15,24 @@ export class Input {
     addEventListener('keydown', (e) => {
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
+      // with ⌘ held, macOS browsers never send the other keys' keyup: don't let them stick
+      if (e.metaKey && !e.code.startsWith('Meta')) return;
       this.keys.add(e.code);
       if (e.code === 'Space') this.jumpQueued = true;
       if (e.code === 'KeyE') this.interactQueued = true;
       this.listeners[e.code]?.();
     });
-    addEventListener('keyup', (e) => this.keys.delete(e.code));
-    addEventListener('blur', () => this.keys.clear());
+    addEventListener('keyup', (e) => {
+      if (e.code.startsWith('Meta')) this.keys.clear(); // see above: anything "held" under ⌘ is stale
+      else this.keys.delete(e.code);
+    });
+    // a held key whose keyup we never see (window switch, pointer lock lost, tab hidden) would walk
+    // Mori on her own: forget everything held whenever the page might have missed a release
+    const release = () => this.keys.clear();
+    addEventListener('blur', release);
+    document.addEventListener('visibilitychange', release);
+    document.addEventListener('pointerlockchange', release);
+    addEventListener('contextmenu', release);
     canvas.addEventListener('mousedown', () => {
       this.dragging = true;
       if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});

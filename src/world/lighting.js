@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
 export const SUN_DIR = new THREE.Vector3(-0.62, 0.48, 0.62).normalize();
-const ZENITH = new THREE.Color('#5d97d6');
-const HORIZON = new THREE.Color('#f4d8a8');
-export const FOG_COLOR = new THREE.Color('#bfc59c');
+const ZENITH = new THREE.Color('#5a9fe8');
+const HORIZON = new THREE.Color('#f6e4c0');
+// a cool, slightly minty haze: distance turns soft and blue-green, like painted aerial perspective
+export const FOG_COLOR = new THREE.Color('#c3d6d4');
 const SHADOW_HALF = 28, SHADOW_DIST = 70; // shadowed square around Mori (m) and sun distance
 export const HEMI = { sky: new THREE.Color('#b9d3ff'), ground: new THREE.Color('#4d5a2c'), intensity: 1.25 };
 
@@ -14,7 +15,7 @@ export function createLighting(scene, renderer) {
   const hemi = new THREE.HemisphereLight(HEMI.sky, HEMI.ground, HEMI.intensity);
   scene.add(hemi);
 
-  const sun = new THREE.DirectionalLight('#ffd9a6', 3.2);
+  const sun = new THREE.DirectionalLight('#ffdcae', 3.5);
   sun.position.copy(SUN_DIR).multiplyScalar(SHADOW_DIST);
   sun.target.position.set(0, 0, 0);
   sun.castShadow = true;

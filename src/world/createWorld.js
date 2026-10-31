@@ -207,7 +207,7 @@ export function createWorld({ scene, renderer, models }) {
   const lanternLights = [];
   for (const l of helpers.lights) {
     const cool = new THREE.Color(l.color ?? '#ffb45a').b > 0.6; // spirit (cyan) lights sit right on pale stone
-    const light = new THREE.PointLight(l.color ?? '#ffb45a', (l.intensity ?? 5) * (cool ? 0.9 : 2.6), l.distance ?? 7, 2);
+    const light = new THREE.PointLight(l.color ?? '#ffb45a', (l.intensity ?? 5) * (cool ? 0.9 : 1.3), l.distance ?? 7, 2);
     light.position.copy(l.position);
     light.userData.base = light.intensity;
     scene.add(light);

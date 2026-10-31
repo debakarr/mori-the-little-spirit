@@ -26,7 +26,7 @@ export function createPostFX(renderer, scene, camera) {
       void main() {
         vec4 c = texture2D(tDiffuse, vUv);
         float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-        c.rgb = mix(vec3(l), c.rgb, 1.08);
+        c.rgb = mix(vec3(l), c.rgb, 1.14);
         c.rgb *= vec3(1.03, 1.0, 0.96);
         c.rgb += vec3(0.008, 0.006, 0.0);
         vec2 d = (vUv - 0.5) * vec2(1.1, 1.0);

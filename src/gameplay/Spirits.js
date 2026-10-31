@@ -61,7 +61,8 @@ export class Spirits {
       return;
     }
     if (form !== 'spirit') {
-      this.ui.toast('Only Mori\'s spirit form can wake a shrine.', 3.5);
+      this.ui.toast('Only Mori\'s spirit form can wake a shrine. Press 1 to become the spirit.', 4);
+      this.audio.chime(330);
       return;
     }
     shrine.woken = true;

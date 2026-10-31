@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { patchMaterial } from '../core/shaders.js';
+import { patchMaterial, ENV_RAMP } from '../core/shaders.js';
 
 const MODEL_URL = `${import.meta.env.BASE_URL}models/`;
 export const MODEL_NAMES = [
@@ -25,7 +25,7 @@ export async function loadModels(onProgress) {
 export function createMaterialLibrary() {
   const std = (params, patch) => {
     const m = new THREE.MeshStandardMaterial({ vertexColors: true, ...params });
-    m.userData.uniforms = patch ? patchMaterial(m, patch) : null;
+    m.userData.uniforms = patchMaterial(m, { ...patch, ramp: ENV_RAMP });
     return m;
   };
   const lib = {

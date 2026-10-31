@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { fbm2, noise2, smoothstep, clamp, lerp } from '../core/noise.js';
-import { patchMaterial } from '../core/shaders.js';
+import { patchMaterial, ENV_RAMP } from '../core/shaders.js';
 
 // ---------------------------------------------------------------- layout
 // The grove (the first clearing, ~25 m across) sits at the origin. Around it: forested hills, a river
@@ -202,21 +202,21 @@ export function slopeAt(x, z) {
 }
 
 const C = (hex) => new THREE.Color(hex);
-const GRASS_DARK = C('#3d6a22');
-const GRASS_LIGHT = C('#74a137');
+const GRASS_DARK = C('#3f7628');
+const GRASS_LIGHT = C('#78a83f');
 const GRASS_DRY = C('#a2a94b');
 const MOSS = C('#3f6328');
-const DIRT = C('#8a6a48');
+const DIRT = C('#9c7a52');
 const MUD = C('#4a3e2b');
 const PEBBLE = C('#7c7564');
-const FOREST = C('#2f4621');
+const FOREST = C('#35522a');
 const ROCK = C('#7f8388');
 const ROCK_DARK = C('#5d6268');
 const SNOW = C('#e8ecef');
 const SAND = C('#b9a77c');
 const HOLLOW = C('#2c4a2c');
 
-function groundColor(x, z, out) {
+export function groundColor(x, z, out) {
   const ds = streamDistance(x, z);
   const pd = pathDistance(x, z);
   const r = Math.hypot(x, z);
@@ -315,7 +315,7 @@ export function createTerrain(inject) {
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96 });
-  patchMaterial(mat, { detail: [1.6, 1.6, 1.6, 0.22], inject });
+  patchMaterial(mat, { detail: [1.6, 1.6, 1.6, 0.22], inject, ramp: ENV_RAMP });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'Terrain';

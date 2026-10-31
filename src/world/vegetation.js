@@ -3,7 +3,7 @@ import { MeshSurfaceSampler } from 'three/addons/math/MeshSurfaceSampler.js';
 import { rng, fbm2, smoothstep } from '../core/noise.js';
 import { patchMaterial } from '../core/shaders.js';
 import { leafClusterTexture } from '../core/textures.js';
-import { heightAt, grassDensity, heightGrid, GRID_N, GRID_HALF } from './terrain.js';
+import { heightAt, grassDensity, groundColor, heightGrid, GRID_N, GRID_HALF } from './terrain.js';
 
 const LEAF_LOW = new THREE.Color('#2f5a24');
 const LEAF_HIGH = new THREE.Color('#9cc24a');
@@ -197,7 +197,7 @@ export function createLeafFringe(canopyMeshes, density = 2.6) {
   return mesh;
 }
 
-const FIELD = 42; // m: the grass patch that travels with Mori
+const FIELD = 40; // m: the grass patch that travels with Mori
 const DENSITY_STEP = 1, DENSITY_N = (GRID_HALF * 2) / DENSITY_STEP + 1;
 
 /**
@@ -207,7 +207,7 @@ const DENSITY_STEP = 1, DENSITY_N = (GRID_HALF * 2) / DENSITY_STEP + 1;
  * thin out toward the edge of the patch. Wind, the player's push and colour variation as before.
  * `blockers` ({x, z, r}) are painted out of the density (rocks, props).
  */
-export function createGrassField({ count = 72000, blockers = [] } = {}) {
+export function createGrassField({ count = 95000, blockers = [] } = {}) {
   const r = rng(42);
   const geo = new THREE.InstancedBufferGeometry().copy(bladeGeometry(3));
   geo.instanceCount = count;
@@ -224,14 +224,23 @@ export function createGrassField({ count = 72000, blockers = [] } = {}) {
   const heightTex = new THREE.DataTexture(heights, GRID_N, GRID_N, THREE.RedFormat, THREE.HalfFloatType);
   heightTex.minFilter = heightTex.magFilter = THREE.LinearFilter;
   heightTex.needsUpdate = true;
+  // density, and the ground colour each blade grows from (so grass and ground read as one surface)
   const dens = new Uint8Array(DENSITY_N * DENSITY_N);
+  const ground = new Uint8Array(DENSITY_N * DENSITY_N * 4);
+  const gc = new THREE.Color();
   for (let j = 0; j < DENSITY_N; j++) {
     for (let i = 0; i < DENSITY_N; i++) {
       const x = -GRID_HALF + i * DENSITY_STEP, z = -GRID_HALF + j * DENSITY_STEP;
       const blocked = blockers.some((b) => (x - b.x) ** 2 + (z - b.z) ** 2 < b.r * b.r);
       dens[j * DENSITY_N + i] = blocked ? 0 : Math.round(grassDensity(x, z) * 255);
+      groundColor(x, z, gc).convertLinearToSRGB(); // stored gamma-encoded for 8-bit precision in the darks
+      ground.set([gc.r * 255, gc.g * 255, gc.b * 255, 255], (j * DENSITY_N + i) * 4);
     }
   }
+  const groundTex = new THREE.DataTexture(ground, DENSITY_N, DENSITY_N, THREE.RGBAFormat, THREE.UnsignedByteType);
+  groundTex.colorSpace = THREE.SRGBColorSpace;
+  groundTex.minFilter = groundTex.magFilter = THREE.LinearFilter;
+  groundTex.needsUpdate = true;
   const densTex = new THREE.DataTexture(dens, DENSITY_N, DENSITY_N, THREE.RedFormat, THREE.UnsignedByteType);
   densTex.minFilter = densTex.magFilter = THREE.LinearFilter;
   densTex.needsUpdate = true;
@@ -240,6 +249,7 @@ export function createGrassField({ count = 72000, blockers = [] } = {}) {
     uCenter: { value: new THREE.Vector2() },
     uHeight: { value: heightTex },
     uDensity: { value: densTex },
+    uGround: { value: groundTex },
   };
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   patchMaterial(mat, { attrs: ['aH'], wind: 'aH * aH * 0.2', push: 'aH * aH', noFlip: true });
@@ -250,7 +260,7 @@ export function createGrassField({ count = 72000, blockers = [] } = {}) {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec2 aOffset; attribute vec4 aRand;
-        uniform vec2 uCenter; uniform sampler2D uHeight; uniform sampler2D uDensity;`)
+        uniform vec2 uCenter; uniform sampler2D uHeight; uniform sampler2D uDensity; uniform sampler2D uGround;`)
       .replace('#include <begin_vertex>', /* glsl */ `#include <begin_vertex>
         {
           // the copy of this blade's slot nearest to the player
@@ -262,17 +272,19 @@ export function createGrassField({ count = 72000, blockers = [] } = {}) {
           float patchN = lsNoise(vec3(p * 0.25, 0.0));
           float hgt = (0.13 + 0.2 * smoothstep(0.3, 0.75, patchN) + aRand.y * 0.08) * (0.6 + 0.4 * dens) * keep;
           float c = cos(aRand.x), s = sin(aRand.x);
-          vec3 q = transformed * vec3(0.8 + aRand.z * 0.5, hgt, 0.8 + aRand.z * 0.5);
+          vec3 q = transformed * vec3(0.55 + aRand.z * 0.35, hgt, 0.6 + aRand.z * 0.4); // fine blades
           transformed = vec3(q.x * c + q.z * s, q.y, -q.x * s + q.z * c);
           transformed += vec3(p.x, texture2D(uHeight, uv).r - 0.02, p.y);
         }`)
       .replace('#include <color_vertex>', /* glsl */ `#include <color_vertex>
         {
           vec2 p = aOffset + ${FIELD.toFixed(1)} * floor((uCenter - aOffset) / ${FIELD.toFixed(1)} + 0.5);
-          float patchN = lsNoise(vec3(p * 0.25, 0.0)), dry = lsNoise(vec3(p * 0.07 + 10.0, 1.0));
-          vec3 tint = mix(vec3(0.079, 0.258, 0.023), vec3(0.235, 0.445, 0.044), smoothstep(0.25, 0.75, patchN) * 0.8 + aRand.y * 0.2);
-          tint = mix(tint, vec3(0.479, 0.456, 0.102), smoothstep(0.62, 0.78, dry) * 0.5);
-          vColor.rgb *= tint;
+          // the ground's own colour at the root, sunlit and a touch warmer toward the tip
+          vec3 soil = texture2D(uGround, (p + ${GRID_HALF.toFixed(1)}) / ${(GRID_HALF * 2).toFixed(1)}).rgb;
+          float tip = smoothstep(0.32, 1.0, vColor.g); // the blade geometry's colour ramps 0.32 -> 1 root to tip
+          vec3 tint = mix(soil * 0.82, soil * vec3(1.35, 1.45, 1.05) + vec3(0.02, 0.035, 0.0), tip);
+          tint *= 0.9 + aRand.y * 0.2;
+          vColor.rgb = tint;
         }`);
   };
   mat.customProgramCacheKey = () => 'grass-field';

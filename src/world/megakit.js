@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { patchMaterial, globalUniforms } from '../core/shaders.js';
+import { patchMaterial, globalUniforms, ENV_RAMP } from '../core/shaders.js';
 
 /**
  * Quaternius' Stylized Nature MegaKit (CC0), packed by tools/blender/prepare_megakit.py: one node per
@@ -40,7 +40,7 @@ function kitMaterial(src) {
   });
   patchMaterial(m, {
     wind: o.wind, flutter: o.flutter, push: o.push, detail: o.detail,
-    noFlip: o.card, nearFade: o.card ? [0.5, 1.4] : undefined,
+    noFlip: o.card, nearFade: o.card ? [0.5, 1.4] : undefined, ramp: ENV_RAMP,
   });
   m.userData.castShadow = !!o.shadow || !o.card;
   materials.set(name, m);

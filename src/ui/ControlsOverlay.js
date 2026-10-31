@@ -157,6 +157,7 @@ export class ControlsOverlay {
   ready({ hasSave, saveInfo = '', onNew, onContinue }) {
     const enter = (fn) => () => {
       this.started = true;
+      document.activeElement?.blur?.(); // a focused menu button would catch Space / Enter during play
       setTimeout(() => {
         this.entry.hide();
         this.hints.classList.remove('hidden');
@@ -179,7 +180,10 @@ export class ControlsOverlay {
   setPaused(on) {
     this.paused = on;
     this.pauseEl.classList.toggle('hidden', !on);
-    if (!on) this.closePanel();
+    if (!on) {
+      this.closePanel();
+      document.activeElement?.blur?.();
+    }
     else this.pauseEl.querySelector('button')?.focus({ preventScroll: true });
   }
 

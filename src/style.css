@@ -244,3 +244,8 @@ body { font-family: 'Nunito', system-ui, sans-serif; color: var(--ink); user-sel
   .ls-keys { grid-template-columns: 1fr; gap: 2px 0; }
   .ls-keys dd { margin-bottom: 8px; }
 }
+
+/* toasts sit low and centred, where the eye already is, instead of in the corner */
+.ls-toast { right: auto; left: 50%; top: auto; bottom: 96px; transform: translateX(-50%); font-size: 15px; padding: 9px 18px;
+  border-radius: 999px; text-align: center; max-width: min(560px, calc(100% - 32px)); border: 1px solid rgba(143, 243, 255, 0.25); }
+@media (max-width: 640px) { .ls-toast { bottom: 120px; right: auto; top: auto; } }

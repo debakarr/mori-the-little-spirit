@@ -211,6 +211,16 @@ if FORM == "fox":
 elif FORM == "bird":
     SEG = BIRD_SEG
 
+if "--dump-seg" in argv:  # the deforming bones as segments, for tools/blender/voxel_weights_fox.py
+    import json
+    segs = {}
+    for n, (end, rad) in SEG.items():
+        a, t = (end[0], end[1]) if isinstance(end[0], tuple) else (J[n], J[end] if isinstance(end, str) else end)
+        segs[n] = [list(a), list(t)]
+    with open(argv[argv.index("--dump-seg") + 1], "w") as f:
+        json.dump({"mesh": MESH, "out": ARP_WEIGHTS, "segments": segs}, f)
+    sys.exit(0)
+
 for o in list(bpy.data.objects):
     bpy.data.objects.remove(o)
 bpy.ops.import_scene.gltf(filepath=ANIMS)
@@ -352,7 +362,7 @@ if os.path.exists(ARP_WEIGHTS):  # Auto-Rig Pro heat-map weights (tools/blender/
     cols = {n: i for i, n in enumerate(arp["bones"])}
     W = np.array([arp["weights"][:, cols[n]] if n in cols else np.zeros(nv) for n in names])
     W /= np.maximum(W.sum(0), 1e-9)
-    print("@@SKIN using Auto-Rig Pro weights", ARP_WEIGHTS, "unmapped:", sorted(set(cols) - set(names)))
+    print("@@SKIN using external weights (Auto-Rig Pro or voxel heat diffuse)", ARP_WEIGHTS, "unmapped:", sorted(set(cols) - set(names)))
 for bi, n in enumerate(names):
     vg = ob.vertex_groups.new(name=n)
     for i in np.where(W[bi] > 1e-3)[0]:
