@@ -6,7 +6,7 @@ import { patchMaterial } from '../core/shaders.js';
 
 const MODEL_URL = `${import.meta.env.BASE_URL}models/`;
 export const MODEL_NAMES = [
-  'mori', 'fox', 'bird', 'glow_mushroom', 'grass_patch', 'stream_pool', 'ancient_tree', 'moss_rocks', 'lantern_post', 'fence', 'lily', 'rune_stone', 'forest_kit', 'megakit',
+  'mori', 'fox', 'bird', 'deer', 'stag', 'glow_mushroom', 'grass_patch', 'stream_pool', 'ancient_tree', 'moss_rocks', 'lantern_post', 'fence', 'lily', 'rune_stone', 'forest_kit', 'megakit',
 ];
 
 export async function loadModels(onProgress) {

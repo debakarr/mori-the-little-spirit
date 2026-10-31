@@ -187,7 +187,8 @@ export class CharacterAnimator {
     this.rot('Hips', X, clamp(s.accel * 0.01, -0.08, 0.08) * ground);
 
     const tail = this.tailYaw.update(-clamp(s.yawRate * 0.12, -0.5, 0.5), dt);
-    this.rot('Tail_Base', Y, tail);
+    const sway = Math.sin(t * 0.8) * 0.12 * idle; // the tail drifts lazily while she rests
+    this.rot('Tail_Base', Y, tail + sway);
     this.rot('Tail_Mid', Y, tail * 0.6);
 
     const ear = this.ears.update(air * (s.vy > 0 ? -0.2 : 0.25), dt);
@@ -197,7 +198,8 @@ export class CharacterAnimator {
     // ---- squash/stretch for jumps and landings
     this.squash.update(0, dt);
     const stretch = clamp(s.vy * 0.025, -0.08, 0.12) * air;
-    const sy = 1 + clamp(this.squash.value, -0.32, 0.25) + stretch;
+    const breathe = Math.sin(t * 2.3) * 0.012 * idle; // a slow breath while still
+    const sy = 1 + clamp(this.squash.value, -0.32, 0.25) + stretch + breathe;
     const sxz = 1 / Math.sqrt(Math.max(sy, 0.5));
     this.visual.scale.set(sxz, sy, sxz);
   }

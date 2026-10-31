@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import { clamp, damp, lerp, smoothstep } from '../core/noise.js';
 
+const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
+const Z = new THREE.Vector3(0, 0, 1);
+// folded wings on the ground (radians): down at the shoulder, swept back, outer half tucked back at the elbow
+export const WING_FOLD = { down: 2.2, back: 0.45, elbow: 1.25 };
+const PROC_BONES = ['head', 'wing_1_L', 'wing_1_R', 'wing_3_L', 'wing_3_R'];
 
 class Spring {
   constructor(stiffness = 120, damping = 12) {
@@ -50,6 +55,12 @@ export class BirdAnimator {
     this._q = new THREE.Quaternion();
     this.look = { yaw: 0, tYaw: 0, next: 2 };
     this.lookTarget = null;
+    this.fold = 1;
+    this.foldPose = { ...WING_FOLD };
+    this._base = new Map(PROC_BONES.filter((n) => this.bones[n]).map((n) => [this.bones[n], this.bones[n].quaternion.clone()]));
+    this._pq = new THREE.Quaternion();
+    this._axis = new THREE.Vector3();
+    this._rootInv = new THREE.Quaternion();
     // pitch and bank turn about the body, not the feet
     this.pivotY = 0.22;
     model.position.y = -this.pivotY;
@@ -61,6 +72,15 @@ export class BirdAnimator {
 
   jump() {
     this.squash.vel += 2.6;
+  }
+
+  /** Rotate a bone about a model-space axis, after the mixer has posed it. */
+  rot(name, axis, angle) {
+    const b = this.bones[name];
+    if (!b || angle === 0) return;
+    b.parent.getWorldQuaternion(this._pq).premultiply(this._rootInv);
+    this._axis.copy(axis).applyQuaternion(this._pq.invert());
+    b.quaternion.premultiply(this._q.setFromAxisAngle(this._axis, angle));
   }
 
   play() {} // no emotes on the bird: a happy flap stands in (PlayerController)
@@ -97,11 +117,24 @@ export class BirdAnimator {
     };
     for (const [n, a] of Object.entries(A)) a.setEffectiveWeight(w[n] ?? 0);
     // the mixer only writes a bone when its animated value changes, so put the clip pose back before
-    // turning the head again, or the turn compounds every frame and the head spins
-    const head = this.bones.head;
-    if (head && this._headBase) head.quaternion.copy(this._headBase);
+    // turning bones again, or the turn compounds every frame (the head would spin)
+    for (const [b, q] of this._base) b.quaternion.copy(q);
     this.mixer.update(dt);
-    if (head) (this._headBase ??= new THREE.Quaternion()).copy(head.quaternion);
+    for (const [b, q] of this._base) q.copy(b.quaternion);
+    this.model.updateMatrixWorld(true);
+    this._rootInv.copy(this.model.getWorldQuaternion(this._q)).invert();
+    const head = this.bones.head;
+
+    // on the ground the wings fold against the body: down at the shoulders, the outer half back
+    this.fold = lerp(this.fold, ground, damp(ground > this.fold ? 5 : 12, dt));
+    const f = this.fold, F = this.foldPose;
+    if (f > 0.001) {
+      for (const [side, sign] of [['L', -1], ['R', 1]]) {
+        this.rot(`wing_1_${side}`, Z, sign * F.down * f);
+        this.rot(`wing_1_${side}`, X, F.back * f);
+        this.rot(`wing_3_${side}`, X, F.elbow * f);
+      }
+    }
 
     // head looks around while perched
     const L = this.look;
@@ -111,7 +144,7 @@ export class BirdAnimator {
       L.tYaw = (Math.random() - 0.5) * 1.4;
     }
     L.yaw = lerp(L.yaw, L.tYaw * ground * (1 - moving), damp(6, dt));
-    if (head) head.quaternion.premultiply(this._q.setFromAxisAngle(Y, L.yaw));
+    if (head) this.rot('head', Y, L.yaw);
 
     // flight attitude: lean into the flight direction, nose up when climbing, bank into turns
     const pitch = this.pitch.update(flying * (smoothstep(0.5, 6, s.speed) * 0.55 - clamp(s.vy * 0.06, -0.25, 0.3)), dt);

@@ -5,7 +5,7 @@
 const SETTINGS_KEY = 'little-spirit.settings';
 const SAVE_KEY = 'little-spirit.save';
 
-export const DEFAULT_SETTINGS = { master: 0.9, music: 0.6, sensitivity: 1, quality: 'high' };
+export const DEFAULT_SETTINGS = { master: 0.9, music: 0.6, sfx: 0.8, sensitivity: 1, quality: 'high' };
 
 function read(key) {
   try {

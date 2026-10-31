@@ -1,27 +1,17 @@
 import { DEFAULT_SETTINGS } from '../core/Storage.js';
+import { EntryScreen } from './EntryScreen.js';
 
 const FORMS = [['spirit', 'Spirit'], ['fox', 'Fox'], ['bird', 'Bird']];
 const QUALITY = [['low', 'Low'], ['medium', 'Medium'], ['high', 'High']];
 
 /**
- * All the UI: the title menu (New Game / Continue / Settings / Credits), the pause menu, settings and
- * credits panels, and the in-game HUD: form indicators, a fading control hint, a short toast line and
+ * All the UI: the entry screen (EntryScreen.js), the pause menu, the settings, controls and credits
+ * panels (shared by the title and the pause menu), and the in-game HUD: form indicators, a fading control hint, a short toast line and
  * the in-world "E" prompt. Menus are plain DOM over the canvas; the game reacts through callbacks.
  */
 export class ControlsOverlay {
-  constructor(root, { settings = DEFAULT_SETTINGS } = {}) {
+  constructor(root, { settings = DEFAULT_SETTINGS, sound = null } = {}) {
     root.innerHTML = `
-      <div class="ls-start" id="ls-start">
-        <div class="ls-title">Little Spirit</div>
-        <div class="ls-sub">Whispers of the Grove</div>
-        <div class="ls-cta loading" id="ls-cta">Gathering the forest…</div>
-        <nav class="ls-menu hidden" id="ls-title-menu">
-          <button data-act="new">New Game</button>
-          <button data-act="continue" id="ls-continue">Continue</button>
-          <button data-act="settings">Settings</button>
-          <button data-act="credits">Credits</button>
-        </nav>
-      </div>
       <div class="ls-pause hidden" id="ls-pause">
         <div class="ls-panel-title">Resting</div>
         <nav class="ls-menu">
@@ -31,15 +21,36 @@ export class ControlsOverlay {
           <button data-act="title">Return to title</button>
         </nav>
       </div>
-      <div class="ls-panel hidden" id="ls-settings">
+      <div class="ls-panel hidden" id="ls-settings" role="dialog" aria-label="Settings">
         <div class="ls-panel-title">Settings</div>
         <label>Master volume <input type="range" min="0" max="1" step="0.05" data-key="master"></label>
         <label>Music volume <input type="range" min="0" max="1" step="0.05" data-key="music"></label>
-        <label>Mouse sensitivity <input type="range" min="0.3" max="2.5" step="0.05" data-key="sensitivity"></label>
+        <label>Sound effects volume <input type="range" min="0" max="1" step="0.05" data-key="sfx"></label>
+        <label>Camera sensitivity <input type="range" min="0.3" max="2.5" step="0.05" data-key="sensitivity"></label>
         <label>Graphics quality
           <select data-key="quality">${QUALITY.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
         </label>
+        <div class="ls-row">
+          <button class="ls-chip" data-act="fullscreen" id="ls-fullscreen" aria-pressed="false">Fullscreen</button>
+          <button class="ls-chip" data-act="controls">Controls</button>
+        </div>
         <nav class="ls-menu"><button data-act="back">Back</button></nav>
+      </div>
+      <div class="ls-panel hidden" id="ls-controls" role="dialog" aria-label="Controls">
+        <div class="ls-panel-title">Controls</div>
+        <dl class="ls-keys">
+          <dt><span class="ls-key">W</span><span class="ls-key">A</span><span class="ls-key">S</span><span class="ls-key">D</span> / arrows</dt><dd>Move</dd>
+          <dt><span class="ls-key">Mouse</span></dt><dd>Camera (click to capture)</dd>
+          <dt><span class="ls-key">Space</span></dt><dd>Jump · as the bird: take off and climb</dd>
+          <dt><span class="ls-key">Shift</span></dt><dd>Run · fly faster</dd>
+          <dt><span class="ls-key">C</span></dt><dd>Dive (bird)</dd>
+          <dt><span class="ls-key">1</span><span class="ls-key">2</span><span class="ls-key">3</span></dt><dd>Spirit · Fox · Bird</dd>
+          <dt><span class="ls-key">E</span></dt><dd>Interact, sit, greet, wake a shrine</dd>
+          <dt><span class="ls-key">F</span></dt><dd>Sniff out a wisp (fox)</dd>
+          <dt><span class="ls-key">Esc</span></dt><dd>Pause</dd>
+          <dt><span class="ls-key">M</span></dt><dd>Sound on / off</dd>
+        </dl>
+        <nav class="ls-menu"><button data-act="back-settings">Back</button></nav>
       </div>
       <div class="ls-panel hidden" id="ls-credits">
         <div class="ls-panel-title">Credits</div>
@@ -47,6 +58,7 @@ export class ControlsOverlay {
           <p><b>Little Spirit: Whispers of the Grove</b><br>made with three.js, Rapier, Vite and Blender</p>
           <p>Forest trees, plants and rocks: <i>Stylized Nature MegaKit</i> by Quaternius (CC0)</p>
           <p>Skeletons and animation clips: Mesh2Motion by Scott Petrovic (CC0)</p>
+          <p>Deer and stag: <i>Ultimate Animated Animal Pack</i> by Quaternius (CC0)</p>
           <p>Music: <i>Forest Ambience</i> by TinyWorlds · Birds and wind: Spring Spring ·
             Stream: RandomMind (all CC0, OpenGameArt)</p>
           <p>Mori, the grove and its props were modelled for this game.</p>
@@ -71,14 +83,13 @@ export class ControlsOverlay {
         <span class="ls-hint"><span class="ls-key">M</span> sound</span>
       </div>
       <div class="ls-prompt" id="ls-prompt"><span class="ls-key">E</span><span id="ls-prompt-label"></span></div>`;
+    this.root = root;
     const $ = (id) => root.querySelector(`#${id}`);
-    this.start = $('ls-start');
-    this.cta = $('ls-cta');
-    this.titleMenu = $('ls-title-menu');
-    this.continueBtn = $('ls-continue');
     this.pauseEl = $('ls-pause');
     this.settingsEl = $('ls-settings');
     this.creditsEl = $('ls-credits');
+    this.controlsEl = $('ls-controls');
+    this.fullscreenBtn = $('ls-fullscreen');
     this.formsEl = $('ls-forms');
     this.toastEl = $('ls-toast');
     this.progressEl = $('ls-progress');
@@ -91,11 +102,13 @@ export class ControlsOverlay {
     this.toastTimer = 0;
     this.started = false;
     this.paused = false;
-    this.back = null; // the menu a panel returns to
+    this.panel = null; // the open panel, if any
     this.settings = { ...settings };
     this.onSettings = null;
     this.onResume = null;
     this.onTitle = null;
+    this.sound = sound;
+    this.entry = new EntryScreen(root, { sound, onPanel: (name) => this.openPanel(name === 'settings' ? this.settingsEl : this.creditsEl) });
 
     for (const input of this.settingsEl.querySelectorAll('[data-key]')) {
       input.value = this.settings[input.dataset.key];
@@ -107,63 +120,87 @@ export class ControlsOverlay {
     }
     root.addEventListener('click', (e) => {
       const act = e.target.closest('button')?.dataset.act;
-      if (act === 'settings' || act === 'credits') this.openPanel(act === 'settings' ? this.settingsEl : this.creditsEl);
+      if (!act) return;
+      if ((act === 'settings' || act === 'credits') && this.started) this.openPanel(act === 'settings' ? this.settingsEl : this.creditsEl);
       else if (act === 'back') this.closePanel();
+      else if (act === 'controls') this.openPanel(this.controlsEl);
+      else if (act === 'back-settings') this.openPanel(this.settingsEl);
+      else if (act === 'fullscreen') this.toggleFullscreen();
       else if (act === 'resume') this.onResume?.();
       else if (act === 'title') this.onTitle?.();
+      if (['back', 'controls', 'back-settings', 'fullscreen', 'resume', 'title'].includes(act)) this.sound?.select();
     });
+    root.addEventListener('pointerover', (e) => {
+      const b = e.target.closest('.ls-panel button, .ls-pause button');
+      if (b && b !== this._hovered) { this._hovered = b; this.sound?.hover(); }
+    });
+    document.addEventListener('fullscreenchange', () => this.fullscreenBtn.setAttribute('aria-pressed', String(!!document.fullscreenElement)));
+    // Esc inside a panel goes back (and must not reach the game, where it would toggle the pause)
+    addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' || !this.panel) return;
+      e.stopImmediatePropagation();
+      if (this.panel === this.controlsEl) this.openPanel(this.settingsEl);
+      else this.closePanel();
+    }, true);
+  }
+
+  toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else document.documentElement.requestFullscreen?.().catch(() => {});
   }
 
   progress(p) {
-    this.cta.textContent = `Gathering the forest… ${Math.round(p * 100)}%`;
+    this.entry.progress(p);
   }
 
-  /** Loading done: show the title menu. onNew / onContinue start the game. */
-  ready({ hasSave, onNew, onContinue }) {
-    this.cta.classList.add('hidden');
-    this.titleMenu.classList.remove('hidden');
-    this.continueBtn.style.display = hasSave ? '' : 'none';
-    const begin = (fn) => {
-      if (this.started) return;
+  /** Loading done: the title comes in. onNew / onContinue start the game; saveInfo shows under Continue. */
+  ready({ hasSave, saveInfo = '', onNew, onContinue }) {
+    const enter = (fn) => () => {
       this.started = true;
-      this.start.classList.add('hidden');
-      this.hints.classList.remove('hidden');
-      this.formsEl.classList.remove('hidden');
-      this.progressEl.classList.remove('hidden');
+      setTimeout(() => {
+        this.entry.hide();
+        this.hints.classList.remove('hidden');
+        this.formsEl.classList.remove('hidden');
+        this.progressEl.classList.remove('hidden');
+      }, 1100);
       fn();
     };
-    this.titleMenu.querySelector('[data-act="new"]').addEventListener('click', () => begin(onNew));
-    this.continueBtn.addEventListener('click', () => begin(onContinue));
+    this.entry.ready({ hasSave, saveInfo, onNew: enter(onNew), onContinue: enter(onContinue) });
   }
 
   error(msg) {
-    this.cta.classList.add('loading');
-    this.cta.textContent = msg;
+    this.entry.error(msg);
   }
 
   get inMenu() {
-    return !this.started || this.paused;
+    return !this.started || this.paused || !!this.panel;
   }
 
   setPaused(on) {
     this.paused = on;
     this.pauseEl.classList.toggle('hidden', !on);
-    if (!on) {
-      this.settingsEl.classList.add('hidden');
-      this.creditsEl.classList.add('hidden');
-    }
+    if (!on) this.closePanel();
+    else this.pauseEl.querySelector('button')?.focus({ preventScroll: true });
   }
 
   openPanel(panel) {
-    this.back = this.started ? this.pauseEl : this.start;
-    this.back.classList.add('dimmed');
-    panel.classList.remove('hidden');
+    for (const p of [this.settingsEl, this.creditsEl, this.controlsEl]) p.classList.toggle('hidden', p !== panel);
+    if (this.started) this.pauseEl.classList.add('dimmed');
+    else this.entry.dim(true);
+    this.panel = panel;
+    panel.querySelector('input, select, button')?.focus({ preventScroll: true });
   }
 
   closePanel() {
-    this.settingsEl.classList.add('hidden');
-    this.creditsEl.classList.add('hidden');
-    this.back?.classList.remove('dimmed');
+    for (const p of [this.settingsEl, this.creditsEl, this.controlsEl]) p.classList.add('hidden');
+    if (!this.panel) return;
+    this.panel = null;
+    if (this.started) {
+      this.pauseEl.classList.remove('dimmed');
+      this.pauseEl.querySelector('button')?.focus({ preventScroll: true });
+    } else {
+      this.entry.dim(false);
+    }
   }
 
   setForm(name) {

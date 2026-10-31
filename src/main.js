@@ -4,7 +4,7 @@ import { Input } from './core/Input.js';
 import { loadSettings, saveSettings, loadGame, saveGame, clearGame } from './core/Storage.js';
 import { loadModels } from './world/assetKit.js';
 import { createWorld } from './world/createWorld.js';
-import { SPAWN, streamDistance, WATER_Y, AREAS } from './world/terrain.js';
+import { SPAWN, streamDistance, WATER_Y, AREAS, TREE_POS } from './world/terrain.js';
 import { PhysicsWorld } from './physics/PhysicsWorld.js';
 import { Forms } from './player/Forms.js';
 import { PlayerController } from './player/PlayerController.js';
@@ -12,13 +12,19 @@ import { FollowCamera } from './camera/FollowCamera.js';
 import { EnvironmentEffects } from './effects/EnvironmentEffects.js';
 import { Butterflies } from './effects/Butterflies.js';
 import { Spirits } from './gameplay/Spirits.js';
+import { Wildlife } from './world/Wildlife.js';
 import { createPostFX } from './effects/PostFX.js';
 import { Ambience } from './audio/Ambience.js';
 import { ControlsOverlay } from './ui/ControlsOverlay.js';
 
 const canvas = document.getElementById('game');
 const settings = loadSettings();
-const ui = new ControlsOverlay(document.getElementById('ui'), { settings });
+// audio exists from the start so the title can play its ambience and menu sounds after the first gesture
+const audio = new Ambience();
+const ui = new ControlsOverlay(document.getElementById('ui'), {
+  settings,
+  sound: { start: () => audio.start(), hover: () => audio.hover(), select: () => audio.select(), toggleMute: () => audio.toggleMute() },
+});
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
@@ -47,7 +53,6 @@ async function boot() {
   spawn.y = world.heightAt(spawn.x, spawn.z);
 
   const input = new Input(canvas);
-  const audio = new Ambience();
   const effects = new EnvironmentEffects(scene, {
     heightAt: world.heightAt,
     mushroomCenter: world.mushroomCenter,
@@ -135,7 +140,7 @@ async function boot() {
   ui.onResume = () => setPaused(false);
   ui.onTitle = () => { save(); location.reload(); };
 
-  input.on('KeyM', () => audio.toggleMute());
+  input.on('KeyM', () => ui.entry.setMuted(audio.toggleMute()));
   input.on('KeyQ', () => canAct() && mori.transform());
   input.on('Digit1', () => canAct() && mori.transform('spirit'));
   input.on('Digit2', () => canAct() && mori.transform('fox'));
@@ -153,15 +158,33 @@ async function boot() {
     if (document.pointerLockElement !== canvas && canAct()) setPaused(true);
   });
 
+  // the title camera glides into the follow camera over a moment when play starts
+  let intro = null;
+  let journeyLook = 0; // New Journey: Mori turns to look out at the forest before the camera moves
   const begin = () => {
     started = true;
+    intro = { t: 0, pos: camera.position.clone(), quat: camera.quaternion.clone() };
+    // a new day starts on the path before the old tree's door (the nook is boxed in by roots), looking up
+    // at the tree; the camera glide covers the step out of the nook
+    if (player.position.distanceTo(nook.position) < 0.5) {
+      const out = new THREE.Vector2(SPAWN.x - TREE_POS.x, SPAWN.z - TREE_POS.z).normalize();
+      const x = TREE_POS.x + out.x * 5.2, z = TREE_POS.z + out.y * 5.2;
+      player.teleport(new THREE.Vector3(x, world.heightAt(x, z), z), Math.atan2(-out.x, -out.y));
+    }
+    follow.yaw = player.yaw + Math.PI;
+    follow.pitch = 0.32;
+    follow.snap(player.position);
     audio.start();
     ui.setForm(mori.name);
     lockPointer();
   };
+  const saved = loadGame();
+  const FORM_NAMES = { spirit: 'spirit', fox: 'fox', bird: 'bird' };
   ui.ready({
-    hasSave: !!loadGame(),
-    onNew: () => { clearGame(); begin(); },
+    hasSave: !!saved,
+    saveInfo: saved ? `✦ ${saved.spirits?.wisps?.length ?? 0} wisps · ◈ ${saved.spirits?.shrines?.length ?? 0} shrines · as the ${FORM_NAMES[saved.form] ?? 'spirit'}` : '',
+    // New Journey: the menu fades, Mori looks out toward the forest, then the camera moves in
+    onNew: () => { clearGame(); journeyLook = 1; setTimeout(begin, 750); },
     onContinue: () => {
       const s = loadGame();
       if (s) {
@@ -184,13 +207,31 @@ async function boot() {
     it.position.y = physics.groundBelow(it.position.x, it.position.y + 4, it.position.z, 8) ?? it.position.y;
   }
   const butterflies = new Butterflies(scene, { heightAt: world.heightAt, homes: world.flowerSpots });
+  const wildlife = new Wildlife(scene, { models, heightAt: world.heightAt });
   const spirits = new Spirits({ scene, world, physics, effects, audio, ui });
+
+  // the title scene: Mori resting in the nook by the ancient tree's roots, the camera drifting slowly
+  // past her and the lanterns (the title sits on the left, so she is framed to the right)
+  const nook = world.interactables.find((i) => i.seat && /tree/.test(i.label));
+  player.teleport(nook.position, nook.yaw);
+  mori.animator.sitNow();
+  const titleLook = new THREE.Vector3(), titleRight = new THREE.Vector3();
+  function titleCamera(t) {
+    const a = nook.yaw + 0.35 + Math.sin(t * 0.06) * 0.45;
+    const r = 6.2 + Math.sin(t * 0.09) * 0.6;
+    camera.position.set(nook.position.x + Math.sin(a) * r, nook.position.y + 2.3 + Math.sin(t * 0.11) * 0.35, nook.position.z + Math.cos(a) * r);
+    titleLook.set(nook.position.x * 0.7 + TREE_POS.x * 0.3, nook.position.y + 1.6, nook.position.z * 0.7 + TREE_POS.z * 0.3);
+    titleRight.set(Math.cos(a), 0, -Math.sin(a));
+    titleLook.addScaledVector(titleRight, -2.6); // shift the view so Mori and the tree sit right of the title
+    camera.lookAt(titleLook);
+  }
 
   function frame(now) {
     timer.update(now);
     const dt = Math.min(timer.getDelta(), 0.05);
     const t = timer.getElapsed();
     globalUniforms.uTime.value = t;
+    input.enabled = started && !paused && !ui.panel; // on the title and in menus keys steer the menu
 
     if (paused) {
       input.consumeLook();
@@ -201,13 +242,19 @@ async function boot() {
       player.update(dt, follow.yaw);
       physics.step();
       follow.update(dt, player.position, player.yaw, player.speed, input.consumeLook(), input.consumeWheel(), player.flying);
+      if (intro) { // ease from the title shot into the follow camera
+        const k = THREE.MathUtils.smootherstep((intro.t += dt) / 1.8, 0, 1);
+        camera.position.lerpVectors(intro.pos, camera.position, k);
+        camera.quaternion.slerpQuaternions(intro.quat, camera.quaternion, k);
+        if (k >= 1) intro = null;
+      }
       if ((saveTime += dt) > SAVE_EVERY) { saveTime = 0; save(); }
     } else {
-      // idle orbit behind the title screen (step physics here too, or the ground isn't in the
-      // query pipeline yet and Mori sinks through it before the game starts)
+      // the title scene (step physics here too, or the ground isn't in the query pipeline yet and
+      // Mori sinks through it before the game starts)
       player.update(dt, follow.yaw);
       physics.step();
-      follow.update(dt, player.position, player.yaw, 0, { dx: -0.35, dy: 0 }, 0);
+      titleCamera(t);
     }
     if (!paused) {
       globalUniforms.uPlayer.value.copy(player.position);
@@ -228,11 +275,19 @@ async function boot() {
       const d = it.position.distanceTo(player.position);
       if (d < 2.0 && (!near || d < near.d)) near = { ...it, d };
     }
+    const deer = wildlife.nearestGreetable(player.position);
+    if (deer && (!near || deer.d < near.d) && player.speed < 3.6) near = deer;
     if (near && canAct()) {
       promptPos.copy(near.position).add({ x: 0, y: 0.9, z: 0 }).project(camera);
       ui.showPrompt(promptPos.z < 1 ? { x: (promptPos.x * 0.5 + 0.5) * innerWidth, y: (-promptPos.y * 0.5 + 0.5) * innerHeight } : null, near.label);
       const pressed = input.consumeInteract();
-      if (pressed && near.key === 'shrine') {
+      if (pressed && near.key === 'greet') {
+        const first = wildlife.greet(near.deer, player.position);
+        mori.animator.play('Idle Alert');
+        effects.emitBurst(near.position, '#ffe3b8', 30, 0.9);
+        audio.chime(587);
+        if (first) ui.toast(near.deer.kind === 'stag' ? 'The stag lowers its antlers to Mori.' : 'The deer sniffs Mori\'s nose.', 3);
+      } else if (pressed && near.key === 'shrine') {
         spirits.awaken(near.shrine, mori.name);
       } else if (pressed && near.seat) {
         player.teleport(near.position, near.yaw);
@@ -251,11 +306,16 @@ async function boot() {
     }
 
     // glance at whatever is interesting nearby: a butterfly, the mushrooms, a door or a seat
-    const poi = butterflies.nearest(player.position, 2.6) ?? (near && near.d < 3 ? near.position : null)
+    const poi = butterflies.nearest(player.position, 2.6) ?? (near && near.d < 3 ? near.position : null) ?? wildlife.nearestInteresting(player.position)
       ?? (world.mushroomCenter.distanceTo(player.position) < 3.5 ? world.mushroomCenter : null);
     const rel = poi ? Math.atan2(poi.x - player.position.x, poi.z - player.position.z) - player.yaw : 0;
     const look = Math.atan2(Math.sin(rel), Math.cos(rel));
     mori.animator.lookTarget = poi && Math.abs(look) < 1.7 ? look : null;
+    if (!started) { // the title: now and then Mori looks round at the camera; on New Journey, out at the forest
+      const toward = (x, z) => { const a = Math.atan2(x - player.position.x, z - player.position.z) - player.yaw; return Math.atan2(Math.sin(a), Math.cos(a)); };
+      if (journeyLook) mori.animator.lookTarget = toward(SPAWN.x + 4, SPAWN.z + 8);
+      else if (t % 9 > 6) mori.animator.lookTarget = toward(camera.position.x, camera.position.z);
+    }
 
     // resting a while: Mori dozes, her glow breathes slowly and sleepy motes drift up
     const dozing = THREE.MathUtils.smoothstep(mori.animator.restTime, 10, 14);
@@ -267,6 +327,7 @@ async function boot() {
     butterflies.update(dt, t, player.position);
     if (mori.tailBone) mori.tailBone.getWorldPosition(tailPos);
     world.update(dt, t, camera, player.position);
+    if (!paused) wildlife.update(dt, t, player.position, { speed: player.speed, flying: player.flying, camera });
     if (canAct()) spirits.update(dt, t, player.position);
     effects.update(dt, t, camera, { tail: mori.tailBone ? tailPos : null, speed: player.speed });
     // water sound: the stream nearby, and the falls carry much further
@@ -293,9 +354,9 @@ async function boot() {
 
   if (import.meta.env.DEV) {
     window.__mori = {
-      player, follow, world, scene, renderer, camera, input, audio, mori, ui, post,
+      player, follow, world, scene, renderer, camera, input, audio, mori, ui, post, wildlife,
       get fps() { return fps; },
-      start: () => ui.titleMenu.querySelector('[data-act="new"]').click(),
+      start: () => ui.entry.menu.querySelector('[data-act="new"]').click(),
     };
   }
 }

@@ -16,7 +16,7 @@ export class Ambience {
   constructor() {
     this.ctx = null;
     this.muted = false;
-    this.volume = { master: 0.9, music: 0.6 };
+    this.volume = { master: 0.9, music: 0.6, sfx: 0.8 };
     this.ducked = false;
     this.files = Object.fromEntries(Object.entries(LOOPS).map(([k, f]) => [k, fetch(AUDIO_URL + f).then((r) => r.arrayBuffer())]));
   }
@@ -26,8 +26,11 @@ export class Ambience {
     const ctx = (this.ctx = new AudioContext());
     this.master = ctx.createGain();
     this.master.gain.value = 0.0;
-    this.master.gain.linearRampToValueAtTime(this.targetGain(), ctx.currentTime + 4);
+    this.master.gain.linearRampToValueAtTime(this.targetGain(), ctx.currentTime + 4); // 0 if muted already
     this.master.connect(ctx.destination);
+    this.sfxGain = ctx.createGain(); // steps, whooshes, chimes and the menu sounds
+    this.sfxGain.gain.value = this.volume.sfx;
+    this.sfxGain.connect(this.master);
     this.noise = this.makeNoise(4);
     this.gains = {};
     const level = { music: MUSIC_LEVEL * this.volume.music, birds: 0.35, water: 0 };
@@ -66,10 +69,35 @@ export class Ambience {
     return buf;
   }
 
+  /** Returns whether sound is now off. Works before audio has started (the choice is kept). */
   toggleMute() {
-    if (!this.ctx) return;
     this.muted = !this.muted;
-    this.applyGain();
+    if (this.ctx) this.applyGain();
+    return this.muted;
+  }
+
+  /** Menu sounds: a soft tick when the focus moves, a small two-note bell when choosing. */
+  hover() {
+    this.tone(1320, 0.012, 0.09);
+  }
+
+  select() {
+    this.tone(880, 0.03, 0.5);
+    setTimeout(() => this.tone(1320, 0.022, 0.6), 70);
+  }
+
+  tone(freq, level, length) {
+    if (!this.ctx || this.muted) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(level, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + length);
+    o.connect(g).connect(this.sfxGain);
+    o.start(t);
+    o.stop(t + length + 0.05);
   }
 
   targetGain() {
@@ -80,11 +108,12 @@ export class Ambience {
     if (!this.ctx) return;
     this.master.gain.setTargetAtTime(this.targetGain(), this.ctx.currentTime, 0.2);
     this.gains.music.gain.setTargetAtTime(MUSIC_LEVEL * this.volume.music, this.ctx.currentTime, 0.2);
+    this.sfxGain.gain.setTargetAtTime(this.volume.sfx, this.ctx.currentTime, 0.2);
   }
 
-  /** Settings: master and music volume, 0..1. */
-  setVolume({ master, music }) {
-    this.volume = { master, music };
+  /** Settings: master, music and sound-effects volume, 0..1. */
+  setVolume({ master, music, sfx = 0.8 }) {
+    this.volume = { master, music, sfx };
     this.applyGain();
   }
 
@@ -113,7 +142,7 @@ export class Ambience {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime((wet ? 0.05 : 0.035) * (1 + run * 0.5), t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + (wet ? 0.18 : 0.08));
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.sfxGain);
     src.start(t, Math.random() * 3, 0.2);
   }
 
@@ -129,7 +158,7 @@ export class Ambience {
     g.gain.setValueAtTime(0.0, t);
     g.gain.linearRampToValueAtTime(0.03, t + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    o.connect(g).connect(this.master);
+    o.connect(g).connect(this.sfxGain);
     o.start(t);
     o.stop(t + 0.25);
   }
@@ -146,7 +175,7 @@ export class Ambience {
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(0.05 / (i + 1), t + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
-      o.connect(g).connect(this.master);
+      o.connect(g).connect(this.sfxGain);
       o.start(t);
       o.stop(t + 2.3);
     });

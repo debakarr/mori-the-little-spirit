@@ -110,3 +110,137 @@ body { font-family: 'Nunito', system-ui, sans-serif; color: var(--ink); user-sel
 }
 .ls-area.visible { opacity: 1; }
 @media (max-width: 640px) { .ls-progress { left: 16px; top: 14px; } .ls-area { white-space: normal; text-align: center; width: calc(100% - 32px); } }
+
+/* ---- title screen: a left-hand title over the scene, the grove itself as the backdrop */
+.ls-start {
+  align-items: flex-start; justify-content: center; padding: 0 0 0 clamp(28px, 8vw, 140px);
+  background:
+    linear-gradient(90deg, rgba(5, 10, 9, 0.78) 0%, rgba(5, 10, 9, 0.45) 32%, rgba(5, 10, 9, 0) 62%),
+    radial-gradient(ellipse at 70% 120%, rgba(0, 0, 0, 0.45), transparent 60%);
+}
+.ls-hero { display: flex; flex-direction: column; align-items: flex-start; max-width: min(560px, 90vw); }
+.ls-title { margin: 0; font-family: 'Cormorant Garamond', serif; font-weight: 500; line-height: 0.95;
+  font-size: clamp(54px, 8.4vw, 124px); letter-spacing: 0.01em; white-space: nowrap;
+  text-shadow: 0 0 28px rgba(143, 243, 255, 0.35), 0 3px 18px rgba(0, 0, 0, 0.55); }
+.ls-title span { display: inline-block; opacity: 0; transform: translateY(10px); filter: blur(6px);
+  animation: ls-letter 1.4s cubic-bezier(.2, .7, .2, 1) forwards; animation-delay: calc(0.25s + var(--i) * 0.07s); }
+@keyframes ls-letter { to { opacity: 1; transform: none; filter: none; } }
+.ls-sub { margin-top: 10px; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: clamp(20px, 2.4vw, 30px);
+  opacity: 0; animation: ls-fade 1.6s ease forwards 1.4s; color: #e7f7f4; }
+.ls-divider { width: min(320px, 60vw); height: 1px; margin-top: 18px; opacity: 0; animation: ls-fade 1.6s ease forwards 1.2s;
+  background: linear-gradient(90deg, rgba(143, 243, 255, 0.9), rgba(143, 243, 255, 0.15) 70%, transparent);
+  box-shadow: 0 0 10px rgba(143, 243, 255, 0.6); }
+@keyframes ls-fade { to { opacity: 1; } }
+/* the emblem: three wisps circling */
+.ls-emblem { position: relative; width: 46px; height: 46px; margin-bottom: 14px; opacity: 0; animation: ls-fade 1.4s ease forwards 0.1s; }
+.ls-emblem::before { content: ''; position: absolute; inset: 14px; border-radius: 50%; background: radial-gradient(circle, #e8ffff, #8ff3ff 45%, transparent 72%);
+  box-shadow: 0 0 22px rgba(143, 243, 255, 0.8); animation: ls-breathe 3.2s ease-in-out infinite; }
+.ls-emblem i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #c6fbff;
+  box-shadow: 0 0 8px #8ff3ff; animation: ls-orbit 5s linear infinite; }
+.ls-emblem i:nth-child(2) { animation-delay: -1.66s; }
+.ls-emblem i:nth-child(3) { animation-delay: -3.33s; }
+@keyframes ls-orbit { from { transform: rotate(0deg) translateX(21px); } to { transform: rotate(360deg) translateX(21px); } }
+@keyframes ls-breathe { 0%, 100% { transform: scale(0.85); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; } }
+/* loading: a thin glowing line */
+.ls-start .ls-cta { margin-top: 34px; display: flex; flex-direction: column; gap: 10px; animation: none; opacity: 0.85;
+  font-size: 12px; letter-spacing: 0.22em; }
+.ls-loadbar { width: 240px; height: 2px; background: rgba(246, 241, 228, 0.15); border-radius: 2px; overflow: hidden; }
+.ls-loadbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8ff3ff, #fff6d8);
+  box-shadow: 0 0 10px #8ff3ff; transition: width 0.4s ease; }
+/* menu: quiet text items with a glowing marker */
+.ls-title-menu { align-items: flex-start; gap: 4px; margin-top: 34px; animation: ls-fade 1s ease forwards; }
+.ls-title-menu button { position: relative; min-width: 0; padding: 9px 0 9px 26px; border: 0; border-radius: 0; background: none;
+  backdrop-filter: none; text-align: left; font: 600 15px 'Nunito', system-ui, sans-serif; letter-spacing: 0.2em;
+  color: rgba(246, 241, 228, 0.78); transition: color 0.25s ease, padding 0.3s ease, text-shadow 0.25s ease; }
+.ls-title-menu button::before { content: ''; position: absolute; left: 4px; top: 50%; width: 8px; height: 8px; margin-top: -4px;
+  border-radius: 50%; background: #8ff3ff; box-shadow: 0 0 10px #8ff3ff; transform: scale(0); transition: transform 0.25s ease; }
+.ls-title-menu button:hover, .ls-title-menu button:focus-visible { outline: none; color: #fff; padding-left: 32px; background: none;
+  border: 0; box-shadow: none; text-shadow: 0 0 14px rgba(143, 243, 255, 0.7); }
+.ls-title-menu button:hover::before, .ls-title-menu button:focus-visible::before { transform: scale(1); }
+.ls-title-menu small { display: block; margin-top: 3px; font: 500 11px 'Nunito', sans-serif; letter-spacing: 0.08em; text-transform: none;
+  color: rgba(198, 251, 255, 0.75); }
+.ls-title-menu small:empty { display: none; }
+.ls-footer { position: absolute; left: clamp(28px, 8vw, 140px); bottom: 26px; font-size: 12px; letter-spacing: 0.08em; opacity: 0.55; }
+@media (max-width: 640px) {
+  .ls-start { align-items: center; padding: 0 16px; background: linear-gradient(180deg, rgba(5, 10, 9, 0.2), rgba(5, 10, 9, 0.75)); }
+  .ls-hero { align-items: center; text-align: center; }
+  .ls-title { white-space: normal; text-align: center; }
+  .ls-title-menu { align-items: center; }
+  .ls-footer { left: 16px; right: 16px; text-align: center; }
+}
+.ls-start .ls-cta.hidden { display: none; }
+
+/* ---- entry screen, round two: loading, warm title, tagline, menu states, panels */
+.ls-loading {
+  position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  background: radial-gradient(ellipse at 50% 45%, #17302a 0%, #0b1714 55%, #070e0c 100%); pointer-events: auto;
+  transition: opacity 1.3s ease;
+}
+.ls-loading.done { opacity: 0; pointer-events: none; }
+.ls-loading-spirit { position: relative; width: 74px; height: 74px; }
+.ls-loading-spirit::before { content: ''; position: absolute; inset: 22px; border-radius: 50%;
+  background: radial-gradient(circle, #f4fff9, #8ff3ff 45%, transparent 72%); box-shadow: 0 0 34px rgba(143, 243, 255, 0.85);
+  animation: ls-breathe 2.8s ease-in-out infinite; }
+.ls-loading-spirit i { position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%;
+  background: #d8fdff; box-shadow: 0 0 10px #8ff3ff; animation: ls-orbit-big 3.6s linear infinite; }
+.ls-loading-spirit i:nth-child(2) { animation-delay: -1.2s; }
+.ls-loading-spirit i:nth-child(3) { animation-delay: -2.4s; }
+@keyframes ls-orbit-big { from { transform: rotate(0deg) translateX(32px) scale(1); } 50% { transform: rotate(180deg) translateX(30px) scale(0.6); } to { transform: rotate(360deg) translateX(32px) scale(1); } }
+.ls-loading-text { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: clamp(20px, 2.4vw, 26px); color: #f3e8cc; letter-spacing: 0.02em; }
+.ls-shimmer { width: 180px; height: 1px; overflow: hidden; background: rgba(243, 232, 204, 0.12); position: relative; }
+.ls-shimmer::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; left: -40%;
+  background: linear-gradient(90deg, transparent, #8ff3ff, #fff3d0, transparent); animation: ls-shimmer 1.8s ease-in-out infinite; }
+@keyframes ls-shimmer { to { left: 100%; } }
+.ls-loading.failed .ls-shimmer, .ls-loading.failed .ls-loading-spirit i { display: none; }
+
+/* the title waits for the loading screen, then comes in; it slides away when the journey begins */
+.ls-start { opacity: 0; transition: opacity 1.2s ease; }
+.ls-start.shown { opacity: 1; }
+.ls-start:not(.shown) * { animation-play-state: paused !important; }
+.ls-hero { transition: opacity 0.7s ease, transform 0.9s cubic-bezier(.4, 0, .2, 1); }
+.ls-start.leaving .ls-hero, .ls-start.leaving .ls-footer, .ls-start.leaving .ls-sound { opacity: 0; transform: translateX(-28px); pointer-events: none; }
+.ls-start.leaving { background: transparent; transition: opacity 1.1s ease, background 1.1s ease; }
+.ls-title { color: #f6ecd2; text-shadow: 0 0 26px rgba(255, 214, 140, 0.35), 0 0 60px rgba(143, 243, 255, 0.15), 0 3px 16px rgba(0, 0, 0, 0.55); }
+.ls-sub { color: #f0e3c2; }
+.ls-divider { background: linear-gradient(90deg, rgba(255, 220, 150, 0.9), rgba(143, 243, 255, 0.35) 60%, transparent);
+  box-shadow: 0 0 10px rgba(255, 214, 140, 0.45); }
+.ls-tagline { margin: 14px 0 0; font-size: clamp(13px, 1.25vw, 15px); letter-spacing: 0.06em; color: rgba(246, 236, 210, 0.82);
+  opacity: 0; animation: ls-fade 1.6s ease forwards 1.8s; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6); }
+.ls-title-menu { opacity: 0; animation: ls-fade 1.2s ease forwards 2.1s; }
+.ls-title-menu button { color: rgba(246, 236, 210, 0.8); }
+.ls-title-menu button::after { content: ''; position: absolute; left: 26px; right: 0; bottom: 4px; height: 1px; transform: scaleX(0); transform-origin: left;
+  background: linear-gradient(90deg, rgba(255, 220, 150, 0.8), transparent); transition: transform 0.35s ease; }
+.ls-title-menu button:hover::after, .ls-title-menu button:focus-visible::after, .ls-title-menu button:focus::after { transform: scaleX(1); left: 32px; }
+.ls-title-menu button:focus { outline: none; color: #fff; padding-left: 32px; text-shadow: 0 0 14px rgba(143, 243, 255, 0.7); }
+.ls-title-menu button:focus::before { transform: scale(1); }
+.ls-footer { opacity: 0.5; animation: none; transition: opacity 0.6s ease; }
+/* sound toggle: a small speaker drawn in CSS */
+.ls-sound { position: absolute; right: 24px; bottom: 20px; width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgba(246, 236, 210, 0.25); background: rgba(10, 18, 16, 0.35); backdrop-filter: blur(6px); pointer-events: auto;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, opacity 0.6s ease; }
+.ls-sound:hover, .ls-sound:focus-visible { outline: none; border-color: rgba(143, 243, 255, 0.7); box-shadow: 0 0 14px rgba(143, 243, 255, 0.35); }
+.ls-sound span { position: absolute; left: 12px; top: 14px; width: 6px; height: 10px; background: #f3e8cc; }
+.ls-sound span::before { content: ''; position: absolute; left: 4px; top: -4px; border: 9px solid transparent; border-right-color: #f3e8cc; border-left: 0; }
+.ls-sound span::after { content: ''; position: absolute; left: 15px; top: -3px; width: 8px; height: 14px; border: 2px solid #f3e8cc; border-left: 0;
+  border-radius: 0 10px 10px 0; opacity: 0.85; }
+.ls-sound.muted span::after { border: 0; width: 2px; height: 16px; left: 18px; top: -3px; background: #f3e8cc; transform: rotate(45deg); border-radius: 1px; }
+/* panels slide in over a translucent veil; the forest stays visible */
+.ls-panel { transform: translate(-50%, -46%); transition: opacity 0.35s ease, transform 0.45s cubic-bezier(.2, .7, .2, 1); z-index: 4; }
+.ls-panel:not(.hidden) { transform: translate(-50%, -50%); }
+.ls-panel.hidden { transform: translate(-50%, -44%); }
+.ls-panel :focus-visible { outline: 2px solid rgba(143, 243, 255, 0.8); outline-offset: 3px; }
+.ls-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.ls-chip { padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(246, 236, 210, 0.3); background: rgba(246, 236, 210, 0.06);
+  color: var(--ink); font: 600 13px 'Nunito', sans-serif; letter-spacing: 0.06em; cursor: pointer; transition: background 0.25s ease, border-color 0.25s ease; }
+.ls-chip:hover { border-color: rgba(143, 243, 255, 0.7); background: rgba(143, 243, 255, 0.1); }
+.ls-chip[aria-pressed="true"] { border-color: rgba(143, 243, 255, 0.85); background: rgba(143, 243, 255, 0.18); }
+.ls-keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; font-size: 13px; margin: 0; }
+.ls-keys dt { display: flex; gap: 4px; align-items: center; white-space: nowrap; font-size: 12px; opacity: 0.9; }
+.ls-keys dd { margin: 0; opacity: 0.9; }
+@media (max-width: 640px) {
+  .ls-start.leaving .ls-hero { transform: translateY(20px); }
+  .ls-sound { right: 16px; bottom: 16px; }
+  .ls-footer { bottom: 70px; }
+  .ls-keys { grid-template-columns: 1fr; gap: 2px 0; }
+  .ls-keys dd { margin-bottom: 8px; }
+}

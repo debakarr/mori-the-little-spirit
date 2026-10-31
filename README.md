@@ -15,6 +15,11 @@ the far places, and only Mori's spirit form can wake them. A woken shrine lights
 brighter, and waking all five makes the grove celebrate. The fox can sniff out the nearest wisp (F). Each
 place's name drifts in the first time you arrive. Progress is part of the save.
 
+**Wildlife:** deer herds with a stag graze, wander and drink in the meadow, by the lake, on the overlook's
+flank and near the hollow. Walk up slowly and they lift their heads to watch; press E to greet one. Rush at
+them and the whole herd gallops off. Little birds wheel over the forest in flocks and fall in beside Mori
+when she flies with them; fish circle in the lake and the falls pool and dart from her feet.
+
 ```bash
 npm install
 npm run dev      # http://localhost:5173
@@ -35,6 +40,7 @@ The title menu has New Game, Continue (when a save exists), Settings (master and
 | `src/player/` | Rapier character controller with bird flight (`PlayerController.js`), clip-based animation (`CharacterAnimator.js`: AnimationMixer + procedural lean/tail/ears; `BirdAnimator.js`: hop, flap/glide blend, pitch and bank), Mori model setup, anime cel shading + ink outline (`toonMaterial.js`), forms and the change between them (`Forms.js`) |
 | `src/camera/FollowCamera.js` | third-person orbit camera with collision; pulls back and widens in flight |
 | `src/effects/` | fireflies/spores/leaves/god rays, butterflies that come to circle Mori (`Butterflies.js`), bloom + grade |
+| `src/world/Wildlife.js` | deer herds (wander, graze, watch, greet, flee together), bird flocks that fly with Mori, fish |
 | `src/gameplay/Spirits.js` | wisps, shrines, the fox's sniffing, place names, the celebration; save state |
 | `src/ui/ControlsOverlay.js`, `src/core/Storage.js` | title / pause / settings / credits menus, form HUD, wisp and shrine counters, place titles, hints; settings and the save slot |
 | `src/audio/Ambience.js` | Web Audio mix: calm music, birds-and-wind and a stream loop that swells near the water (CC0 tracks below), plus synthesized steps and chimes |
@@ -69,6 +75,7 @@ npm run assets   # rebuild every runtime model headless
 
 - Forest trees, plants, rocks: [Stylized Nature MegaKit](https://quaternius.com/packs/stylizednaturemegakit.html) by Quaternius (CC0)
 - Fox and bird skeletons and animation clips: [Mesh2Motion](https://github.com/scottpetrovic/mesh2motion-app) by Scott Petrovic (CC0)
+- Deer and stag: [Ultimate Animated Animal Pack](https://quaternius.com/packs/ultimateanimatedanimals.html) by Quaternius (CC0); `node tools/prepare_animals.mjs` keeps only the gentle clips and compresses them (`art/animals_src/README.md`)
 
 ## Dev log
 
@@ -78,6 +85,7 @@ npm run assets   # rebuild every runtime model headless
 - **Bigger world:** the grove became the centre of a ~240 m valley (heightfield physics, one height grid for terrain/physics/grass), a river with falls and a lake, four new places, trails, mountains beyond the walkable ring, ~700 MegaKit trees (real geometry within 40 m, baked billboards out to 260 m, trunk colliders), undergrowth that appears near the camera, and grass that travels with Mori. Wisps, shrines and the fox's nose give it optional goals.
 - **Fixes:** the bird's head no longer spins (its look-around turn compounded every frame on bones the mixer didn't rewrite); its resting wings close only part way instead of folding into spikes; Mori no longer walks through tree trunks; the invisible wall around the grove is gone.
 - **Performance:** in the dev browser (727×683 window, 1.5× pixel ratio) a frame takes 13–16 ms on the GPU; bloom is ~4.5 ms of that (pass count, not pixels: it runs at a quarter resolution now). Resolution adapts down when frames run long. Not yet measured on other machines.
+- **Wildlife and polish:** deer and stag herds, bird flocks and fish; the bird folds its wings against its body on the ground (down at the shoulder, the outer half back at the elbow, blended out on takeoff); a new title screen (the grove as a slow cinematic backdrop with Mori resting in the tree's nook, the title on the left, a save summary under Continue, a glide from the title shot into play). Steady 60 fps in the grove, meadow, hollow, forest and lake (dev browser, 1.5x pixel ratio).
 - **Known gaps:** the fox still uses distance weights (no Auto-Rig Pro pass yet); shadows only cover ~28 m around Mori; the far mountains are coarse geometry seen through haze.
 
 ## Audio credits

@@ -125,9 +125,10 @@ if FORM == "bird":
     OUT = os.path.join(ROOT, "public", "models", "bird.glb")
     ARP_WEIGHTS = ""
     BIND_CLIP, UNFOLD, SWING = None, {}, {}
-    # the template folds its long wings flat along the body; Mori's short wings would fold into spikes,
-    # so at rest and while hopping they only close part way
-    CLIP_SWING = {"Idle": {"wing": 0.45}, "Walk": {"wing": 0.45}}
+    # the template folds its long wings flat along the body, which turns Mori's short wings into spikes;
+    # on the ground the wings keep the spread rest pose here and the game folds them her own way
+    # (src/player/BirdAnimator.js: down at the shoulder, the outer half back at the elbow)
+    CLIP_SWING = {"Idle": {"wing": 0.0}, "Walk": {"wing": 0.0}}
     CLIPS = ["Idle", "Walk", "Flap", "Glide"]
     NO_GROUND = {"Flap", "Glide"}
     FEET = ["Toes_tip_L", "Toes_tip_R", "Foot_L", "Foot_R"]

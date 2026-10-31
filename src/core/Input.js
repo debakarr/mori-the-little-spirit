@@ -10,6 +10,7 @@ export class Input {
     this.interactQueued = false;
     this.dragging = false;
     this.listeners = {};
+    this.enabled = true; // off on the title and in menus: keys then steer the menu, not Mori
 
     addEventListener('keydown', (e) => {
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -44,6 +45,7 @@ export class Input {
   }
 
   get move() {
+    if (!this.enabled) return { x: 0, y: 0 };
     return {
       x: (this.has('KeyD', 'ArrowRight') ? 1 : 0) - (this.has('KeyA', 'ArrowLeft') ? 1 : 0),
       y: (this.has('KeyW', 'ArrowUp') ? 1 : 0) - (this.has('KeyS', 'ArrowDown') ? 1 : 0),
@@ -51,21 +53,21 @@ export class Input {
   }
 
   get run() {
-    return this.has('ShiftLeft', 'ShiftRight');
+    return this.enabled && this.has('ShiftLeft', 'ShiftRight');
   }
 
   get jumpHeld() {
-    return this.keys.has('Space');
+    return this.enabled && this.keys.has('Space');
   }
 
   consumeJump() {
-    const j = this.jumpQueued;
+    const j = this.jumpQueued && this.enabled;
     this.jumpQueued = false;
     return j;
   }
 
   consumeInteract() {
-    const j = this.interactQueued;
+    const j = this.interactQueued && this.enabled;
     this.interactQueued = false;
     return j;
   }
