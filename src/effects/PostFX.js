@@ -12,6 +12,11 @@ export function createPostFX(renderer, scene, camera) {
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.55, 0.55, 0.92);
+  // the glow is soft: blurring at a quarter of the screen (instead of the pass's own half) costs a
+  // fraction and looks the same
+  const bloomSize = bloom.setSize.bind(bloom);
+  bloom.setSize = (w, h) => bloomSize(Math.max(2, Math.round(w / 2)), Math.max(2, Math.round(h / 2)));
+  bloom.setSize(size.x, size.y);
   composer.addPass(bloom);
   composer.addPass(new ShaderPass({
     uniforms: { tDiffuse: { value: null } },

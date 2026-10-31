@@ -26,6 +26,8 @@ export class PhysicsWorld {
     for (const s of specs) {
       let desc = null;
       if (s.type === 'trimesh') desc = RAPIER.ColliderDesc.trimesh(s.vertices, s.indices);
+      else if (s.type === 'cylinder') desc = RAPIER.ColliderDesc.cylinder(s.halfHeight, s.radius).setTranslation(s.center.x, s.center.y, s.center.z);
+      else if (s.type === 'heightfield') desc = RAPIER.ColliderDesc.heightfield(s.rows, s.cols, s.heights, { x: s.size, y: 1, z: s.size });
       else if (s.type === 'hull') desc = s.points.length >= 12 ? RAPIER.ColliderDesc.convexHull(s.points) : null;
       else if (s.type === 'cuboid') {
         desc = RAPIER.ColliderDesc.cuboid(...s.half)

@@ -117,6 +117,7 @@ if FORM == "fox":
             f"Back_Leg_Foot_{side}": (f"Back_Leg_Tip_{side}", 0.025),
         }
 NO_GROUND = set()  # clips whose feet are not pinned to the floor (flight)
+CLIP_SWING = {}  # per-clip SWING overrides
 if FORM == "bird":
     import prepare_bird  # noqa: E402  (shares the bird's normalised -> game space)
     ANIMS = os.path.join(ROOT, "art", "mesh2motion", "bird-animations.glb")
@@ -124,6 +125,9 @@ if FORM == "bird":
     OUT = os.path.join(ROOT, "public", "models", "bird.glb")
     ARP_WEIGHTS = ""
     BIND_CLIP, UNFOLD, SWING = None, {}, {}
+    # the template folds its long wings flat along the body; Mori's short wings would fold into spikes,
+    # so at rest and while hopping they only close part way
+    CLIP_SWING = {"Idle": {"wing": 0.45}, "Walk": {"wing": 0.45}}
     CLIPS = ["Idle", "Walk", "Flap", "Glide"]
     NO_GROUND = {"Flap", "Glide"}
     FEET = ["Toes_tip_L", "Toes_tip_R", "Foot_L", "Foot_R"]
@@ -288,7 +292,7 @@ for clip in CLIPS:
                 delta = q @ FOX_REST[n].inverted()
                 if delta.w < 0:
                     delta.negate()
-                q = Quaternion().slerp(delta, next((v for k, v in SWING.items() if n.startswith(k)), 1.0)) @ STANCE[n]
+                q = Quaternion().slerp(delta, next((v for k, v in CLIP_SWING.get(clip, SWING).items() if n.startswith(k)), 1.0)) @ STANCE[n]
             W[n] = Matrix.LocRotScale(pos, q, None)
         dz = 0 if clip in NO_GROUND else \
             floor - min(min(W[f].translation.z, (W[f] @ Vector((0, rig.data.bones[f].length, 0))).z) for f in FEET)

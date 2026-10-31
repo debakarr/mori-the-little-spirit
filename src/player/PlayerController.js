@@ -5,7 +5,7 @@ const GRAVITY = 16;
 const BOUNCE = 9.5;
 const RADIUS = 0.22;
 const HALF = 0.15;
-const MAX_FLY_Y = 15; // over the ancient tree's crown (12.8 m), below the top of the boundary walls
+const MAX_FLY_Y = 95; // never above this, whatever the ground below (the boundary walls reach ~100 m)
 
 function dampAngle(a, b, k) {
   const d = Math.atan2(Math.sin(b - a), Math.cos(b - a));
@@ -21,7 +21,8 @@ function dampAngle(a, b, k) {
  * faster, and touching any surface (ground, rock, branch pad) lands and perches.
  */
 export class PlayerController {
-  constructor({ physics, input, mori, spawn, facing = Math.PI, events = {} }) {
+  constructor({ physics, input, mori, spawn, facing = Math.PI, events = {}, ceiling = null }) {
+    this.ceiling = ceiling; // (x, z) -> highest the bird climbs there
     this.physics = physics;
     this.input = input;
     this.mori = mori;
@@ -86,7 +87,8 @@ export class PlayerController {
       else if (input.jumpHeld) { climb = 3.2; flap = 1; }
       else if (input.has('KeyC', 'ControlLeft', 'ControlRight')) climb = -4.6;
       if (jumped) this.vy = Math.max(this.vy, 0) + 2.2;
-      const room = MAX_FLY_Y - this.position.y; // soft ceiling over the grove
+      const top = Math.min(MAX_FLY_Y, this.ceiling ? this.ceiling(this.position.x, this.position.z) : MAX_FLY_Y);
+      const room = top - this.position.y; // soft ceiling
       if (room < 2) climb = Math.min(climb, room * 1.2 - 0.4);
       this.vy += (climb - this.vy) * damp(input.jumpHeld ? 4 : 2.2, dt);
       this.flap = flap;

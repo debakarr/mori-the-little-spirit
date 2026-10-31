@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { heightAt, STREAM_SAMPLES, WATER_Y } from './terrain.js';
+import { heightAt, STREAM_SAMPLES, WATER_Y, AREAS } from './terrain.js';
 import { globalUniforms } from '../core/shaders.js';
 import { SUN_DIR } from './lighting.js';
 
@@ -141,13 +141,24 @@ export function createStream(renderer, envMap, sun) {
   }
 
   const bed = bedInject({ uCaustics: { value: target.texture }, uSunDir: { value: SUN_DIR } });
-  return { mesh: createWaterSurface(envMap, sun), bed, update, target };
+  const mesh = new THREE.Group();
+  mesh.name = 'Water';
+  const mat = waterMaterial(envMap, sun);
+  for (const geo of [ribbonGeometry(), discGeometry(AREAS.lake, AREAS.lake.r + 9), discGeometry(AREAS.falls, AREAS.falls.r + 1.5)]) {
+    const m = new THREE.Mesh(geo, mat);
+    m.renderOrder = 2;
+    m.receiveShadow = true;
+    mesh.add(m);
+  }
+  return { mesh, bed, update, target };
 }
 
-/** Water surface: a ribbon along the stream curve with per-vertex depth to the bed. */
-function createWaterSurface(envMap, sun) {
+/** Water surface: a ribbon along the stream curve with per-vertex depth to the bed (stopping where the
+ * lake and the falls pool take over, so two surfaces never overlap). */
+function ribbonGeometry() {
   const half = 1.75, across = 12;
-  const pts = STREAM_SAMPLES;
+  const inPool = (p, a, pad) => Math.hypot(p.x - a.x, p.z - a.z) < a.r + pad;
+  const pts = STREAM_SAMPLES.filter((p) => !inPool(p, AREAS.lake, 6) && !inPool(p, AREAS.falls, 0.5));
   const n = pts.length;
   const pos = new Float32Array(n * (across + 1) * 3);
   const uv = new Float32Array(n * (across + 1) * 2);
@@ -183,7 +194,36 @@ function createWaterSurface(envMap, sun) {
   geo.setAttribute('aDepth', new THREE.BufferAttribute(depth, 1));
   geo.setIndex(idx);
   geo.computeVertexNormals();
+  return geo;
+}
 
+/** A round water surface (lake, pool) over the terrain's bowl; flow coordinates are just world xz. */
+function discGeometry(c, radius) {
+  const rings = 24, segs = 72;
+  const pos = [], uv = [], depth = [], idx = [];
+  for (let i = 0; i <= rings; i++) {
+    for (let j = 0; j <= segs; j++) {
+      const rr = (i / rings) * radius, a = (j / segs) * Math.PI * 2;
+      const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr;
+      pos.push(x, WATER_Y, z);
+      uv.push(x / 9, z / 3);
+      depth.push(WATER_Y - heightAt(x, z));
+      if (i < rings && j < segs) {
+        const k = i * (segs + 1) + j;
+        idx.push(k, k + 1, k + segs + 1, k + 1, k + segs + 2, k + segs + 1);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute('aDepth', new THREE.Float32BufferAttribute(depth, 1));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function waterMaterial(envMap, sun) {
   const mat = new THREE.MeshStandardMaterial({
     color: '#0e3532', roughness: 0.18, metalness: 0.0, transparent: true,
     envMap, envMapIntensity: 0.6, depthWrite: false,
@@ -257,9 +297,108 @@ function createWaterSurface(envMap, sun) {
         }
         #include <opaque_fragment>`);
   };
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'Stream';
-  mesh.renderOrder = 2;
-  mesh.receiveShadow = true;
-  return mesh;
+  return mat;
+}
+
+/**
+ * Whisper Falls: a sheet of water arching off the cliff lip into the pool (scrolling streaks and foam in
+ * the shader), with a churned foam ring and a soft mist where it lands.
+ */
+export function createWaterfall() {
+  const F = AREAS.falls;
+  const dir = new THREE.Vector2(F.x, F.z).normalize();
+  const side = new THREE.Vector2(-dir.y, dir.x);
+  const topAlong = 7.7, width = 3.4, rows = 24, cols = 8;
+  const top = heightAt(F.x + dir.x * topAlong, F.z + dir.y * topAlong) + 0.05;
+  const pos = [], uv = [], idx = [];
+  for (let i = 0; i <= rows; i++) {
+    const v = i / rows;
+    const along = topAlong - 4 * Math.sqrt(v); // arcs out off the lip, clear of the cliff face below
+    const y = top + (WATER_Y - top) * v;
+    for (let j = 0; j <= cols; j++) {
+      const u = j / cols - 0.5;
+      const w = width * (1 + v * 0.35) * u; // spreads a little as it falls
+      pos.push(F.x + dir.x * along + side.x * w, y, F.z + dir.y * along + side.y * w);
+      uv.push(j / cols, v);
+      if (i < rows && j < cols) {
+        const k = i * (cols + 1) + j;
+        idx.push(k, k + cols + 1, k + 1, k + 1, k + cols + 1, k + cols + 2);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  const noise = /* glsl */ `
+    float fH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float fN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(fH(i), fH(i + vec2(1, 0)), f.x), mix(fH(i + vec2(0, 1)), fH(i + vec2(1, 1)), f.x), f.y); }`;
+  const sheet = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+    uniforms: { uTime: globalUniforms.uTime },
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: /* glsl */ `
+      uniform float uTime; varying vec2 vUv;
+      ${noise}
+      void main() {
+        vec2 p = vec2(vUv.x * 9.0, vUv.y * 5.0 - uTime * 2.6);
+        float streak = fN(p * vec2(1.0, 0.35)) * 0.6 + fN(p * vec2(2.3, 0.8) + 7.0) * 0.4;
+        float edge = smoothstep(0.0, 0.14, vUv.x) * smoothstep(1.0, 0.86, vUv.x);
+        float foam = smoothstep(0.75, 1.0, vUv.y) + smoothstep(0.55, 0.85, streak) * 0.6;
+        vec3 c = mix(vec3(0.42, 0.66, 0.7), vec3(0.95, 0.98, 1.0), clamp(foam + streak * 0.35, 0.0, 1.0));
+        gl_FragColor = vec4(c * 1.1, edge * (0.55 + streak * 0.35 + foam * 0.3));
+        #include <colorspace_fragment>
+      }`,
+  }));
+  sheet.renderOrder = 3;
+
+  // churned water where it lands, and mist rising off it
+  const land = new THREE.Vector3(F.x + dir.x * (topAlong - 4), WATER_Y + 0.02, F.z + dir.y * (topAlong - 4));
+  const foam = new THREE.Mesh(new THREE.CircleGeometry(3.2, 40).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+    uniforms: { uTime: globalUniforms.uTime },
+    transparent: true, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: /* glsl */ `
+      uniform float uTime; varying vec2 vUv;
+      ${noise}
+      void main() {
+        vec2 d = vUv - 0.5; float r = length(d) * 2.0;
+        float a = atan(d.y, d.x);
+        float n = fN(vec2(a * 4.0, r * 6.0 - uTime * 1.8)) * 0.6 + fN(vec2(a * 9.0 + 3.0, r * 11.0 - uTime * 2.4)) * 0.4;
+        float alpha = smoothstep(1.0, 0.3, r) * smoothstep(0.35, 0.75, n);
+        gl_FragColor = vec4(vec3(0.93, 0.97, 1.0), alpha * 0.85);
+        #include <colorspace_fragment>
+      }`,
+  }));
+  foam.position.copy(land);
+  foam.renderOrder = 3;
+  const mist = new THREE.Sprite(new THREE.SpriteMaterial({ color: '#e8f6ff', transparent: true, opacity: 0.35, depthWrite: false }));
+  mist.material.map = softMistTexture();
+  mist.position.copy(land).add({ x: 0, y: 1.2, z: 0 });
+  mist.scale.set(7, 4.5, 1);
+  const group = new THREE.Group();
+  group.name = 'Waterfall';
+  group.add(sheet, foam, mist);
+  return {
+    group, base: land, top: new THREE.Vector3(F.x + dir.x * topAlong, top, F.z + dir.y * topAlong),
+    update(t) {
+      mist.material.opacity = 0.3 + 0.06 * Math.sin(t * 1.3);
+      mist.scale.set(7 + Math.sin(t * 0.7) * 0.5, 4.5 + Math.sin(t * 0.9) * 0.4, 1);
+    },
+  };
+}
+
+function softMistTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }

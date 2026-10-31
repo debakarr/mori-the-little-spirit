@@ -5,13 +5,15 @@ import { softDotTexture } from '../core/textures.js';
 import { createLighting } from './lighting.js';
 import {
   createTerrain, terrainColliderData, heightAt, streamDistance, pathDistance, grassDensity, TREE_POS, TREE_BASE_Y, SPAWN, WATER_Y,
+  WORLD_RADIUS, AREAS,
 } from './terrain.js';
-import { createStream } from './water.js';
-import { createGrass, createLeafFringe } from './vegetation.js';
+import { createStream, createWaterfall } from './water.js';
+import { createGrass, createGrassField, createLeafFringe } from './vegetation.js';
 import { createMaterialLibrary, prepareScene, place, collectHelpers, batchStatic } from './assetKit.js';
-import { placeKit } from './megakit.js';
+import { placeKit, KitLOD, bakeImpostors } from './megakit.js';
+import { generateForest, TREE_MODELS } from './forest.js';
+import { buildAreas } from './areas.js';
 
-const BOUNDARY_RADIUS = 12.9; // ~26 m playable clearing; the bush ring sits just outside
 const CROWN_SOLID_ABOVE = 6.4; // metres over the tree's base: the crown's collider starts above the lantern ropes
 
 // [node, x, z, yaw, scale, grass-clear radius]
@@ -33,17 +35,10 @@ const POOL = { x: 7.2, z: 4.7, yaw: 1.4, scale: 3.8 };
 // painted grass/flower patches (tools/blender/prepare_grass_patch.py): [x, z, scale, yaw]
 const GRASS_PATCHES = [[-3.6, 3.2, 2.8, 0.4], [4.2, 7.4, 2.4, 2.1], [-9.0, 2.8, 2.6, 4.2], [1.4, -8.6, 2.5, 1.0], [-4.6, -6.6, 2.2, 5.3], [9.6, -3.0, 2.0, 3.3]];
 const LILY_PATCHES = [[-4.4, 5.6, 7], [3.4, 8.6, 6], [-9.6, 0.9, 5], [3.9, -2.1, 5], [-5.3, -2.4, 4], [6.0, -8.0, 5], [-2.7, -2.3, 3], [1.4, -2.6, 3], [-1.8, 11.2, 4]];
-// MegaKit (src/world/megakit.js) picks for the forest; undergrowth is [model, min scale, max scale]
-const KIT_TREES = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5'];
-const KIT_PINES = ['Pine_1', 'Pine_2', 'Pine_3', 'Pine_5'];
-const UNDERGROWTH = [
-  ['Bush_Common', 0.7, 1.0], ['Bush_Common_Flowers', 0.6, 0.85], ['Fern_1', 0.85, 1.25], ['Fern_1', 0.85, 1.25],
-  ['Plant_1_Big', 0.6, 0.9], ['Plant_1', 0.8, 1.1],
-];
 const MUSHROOMS = [[-6.5, -1.3, 1.7, 0.3], [-5.0, -0.1, 0.8, 2.2], [-7.4, -2.8, 0.6, 4.0]]; // each is a 3-mushroom cluster
 
 export function createWorld({ scene, renderer, models }) {
-  const { sun, envMap } = createLighting(scene, renderer);
+  const { sun, envMap, followShadow } = createLighting(scene, renderer);
   const lib = createMaterialLibrary();
   const r = rng(7);
   const blockers = [];
@@ -52,6 +47,8 @@ export function createWorld({ scene, renderer, models }) {
 
   const stream = createStream(renderer, envMap, sun);
   scene.add(createTerrain(stream.bed), stream.mesh);
+  const waterfall = createWaterfall();
+  scene.add(waterfall.group);
 
   // ---- ancient tree, facing the spawn point
   const tree = prepareScene(models.ancient_tree.scene, lib).getObjectByName('AncientTree');
@@ -106,45 +103,20 @@ export function createWorld({ scene, renderer, models }) {
     }
   }
 
-  // ---- background forest (MegaKit trees and undergrowth) + the Blender bush ring
+  // ---- the Blender bush ring around the clearing (open where the trails lead out); the wider world's
+  //      forest is MegaKit trees and undergrowth with distance-based detail (forest.js, megakit.js)
   const kit = prepareScene(models.forest_kit.scene, lib);
   const bushes = ['bush_a', 'bush_b', 'bush_c'].map((n) => kit.getObjectByName(n));
   const pick = (list) => list[Math.floor(r() * list.length)];
-  const forest = [];
-  for (let i = 0; i < 120; i++) {
-    const a = (i / 120) * Math.PI * 2 + r() * 0.06;
-    const rad = 15.5 + r() * 22 + (i % 3) * 2;
-    const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-    if (streamDistance(x, z) < 3.2) continue;
-    forest.push({ model: pick(r() < 0.7 ? KIT_TREES : KIT_PINES), x, z, y: heightAt(x, z) - 0.15, yaw: r() * 6.28, scale: 1.2 + r() * 0.45 });
-  }
-  for (let i = 0; i < 7; i++) { // old giants standing over the far canopy
-    const a = (i / 7) * Math.PI * 2 + 0.35 + r() * 0.3;
-    const x = Math.cos(a) * (31 + r() * 5), z = Math.sin(a) * (31 + r() * 5);
-    if (streamDistance(x, z) < 6) continue;
-    forest.push({ model: pick(['TwistedTree_1', 'TwistedTree_3']), x, z, y: heightAt(x, z) - 0.2, yaw: r() * 6.28, scale: 0.95 + r() * 0.25 });
-  }
-  for (let i = 0; i < 170; i++) { // undergrowth between the trunks, densest just outside the clearing
-    const a = r() * Math.PI * 2;
-    const rad = 13.2 + Math.pow(r(), 1.6) * 14;
-    const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-    if (streamDistance(x, z) < 1.6) continue;
-    const [model, s0, s1] = pick(UNDERGROWTH);
-    forest.push({ model, x, z, y: heightAt(x, z) - 0.04, yaw: r() * 6.28, scale: s0 + r() * (s1 - s0) });
-  }
-  for (let i = 0; i < 9; i++) {
-    const a = r() * Math.PI * 2, rad = 14.5 + r() * 7;
-    const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-    if (streamDistance(x, z) < 2.5) continue;
-    forest.push({ model: pick(['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3']), x, z, y: heightAt(x, z) - 0.1, yaw: r() * 6.28, scale: 0.45 + r() * 0.35 });
-  }
-  placeKit(models.megakit, forest, scene);
+  const { trees, ground } = generateForest();
+  const impostors = bakeImpostors(renderer, models.megakit, TREE_MODELS);
+  const lod = new KitLOD(models.megakit, [...trees, ...ground], scene, { impostors });
   const bushObjects = [];
   for (let i = 0; i < 52; i++) {
     const a = (i / 52) * Math.PI * 2 + r() * 0.1;
     const rad = 12.4 + r() * 2.6;
     const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-    if (streamDistance(x, z) < 2.2) continue;
+    if (streamDistance(x, z) < 2.2 || pathDistance(x, z) < 2.4) continue;
     bushObjects.push(place(bushes[i % 3], staticRoot, { x, z, y: heightAt(x, z) - 0.05, yaw: r() * 6.28, scale: 1.0 + r() * 0.7, fringe: true }));
   }
   for (const [x, z, s] of [[-9.9, -2.7, 1.2], [10.6, -6.4, 1.0], [-10.4, 6.9, 1.3], [6.2, 10.6, 0.9], [-7.9, -7.9, 1.1], [-3.4, -8.4, 0.9]]) {
@@ -212,6 +184,10 @@ export function createWorld({ scene, renderer, models }) {
   }
   scene.add(mushrooms);
 
+  // ---- the places beyond the grove (areas.js): shrines, stone circle, giant mushrooms, wisp spots
+  const areas = buildAreas({ scene, models, staticRoot, place, rune, rocks, mushSrc, capHull, waterfall });
+  hulls.push(...areas.hulls);
+
   // ---- helpers (colliders, lights, glows, interaction points) then batch statics
   const helpers = collectHelpers(staticRoot);
   hulls.push(...helpers.hulls);
@@ -222,7 +198,9 @@ export function createWorld({ scene, renderer, models }) {
   batchStatic(staticRoot, batched);
   scene.add(batched);
 
-  scene.add(createGrass({ blockers }));
+  scene.add(createGrass({ count: 0, blockers })); // the grove's wildflowers
+  const grass = createGrassField({ blockers });
+  scene.add(grass.mesh);
 
   // ---- lights and glow sprites from Blender empties
   const dot = softDotTexture();
@@ -271,10 +249,12 @@ export function createWorld({ scene, renderer, models }) {
   ]) {
     interactables.push({ position: new THREE.Vector3(s.x, heightAt(s.x, s.z), s.z), label: s.label, key: 'seat', seat: true, yaw: toFace(s.x, s.z, 0, 2) });
   }
+  for (const sh of areas.shrines) interactables.push({ position: sh.position, label: sh.label, key: 'shrine', shrine: sh });
 
-  // ---- collision: terrain, prop hulls, an invisible ring keeping Mori in the clearing
-  const colliders = [{ type: 'trimesh', ...terrainColliderData() }];
+  // ---- collision: terrain, prop hulls, an invisible ring at the mountains' feet
+  const colliders = [{ type: 'heightfield', ...terrainColliderData() }];
   for (const h of hulls) colliders.push({ type: 'hull', points: h.points, bounce: h.bounce });
+  for (const t of trees) colliders.push({ type: 'cylinder', center: new THREE.Vector3(t.x, t.y + 1.6, t.z), halfHeight: 1.6, radius: t.trunk });
   // bushes: Mori brushes through them; the camera rises over them (FollowCamera)
   for (const b of bushObjects) colliders.push({ type: 'hull', points: meshPoints(b, 0.8), cameraOnly: true });
   // the ancient tree's crown is solid above the lantern branches: the bird flies under it or lands on
@@ -289,18 +269,34 @@ export function createWorld({ scene, renderer, models }) {
     colliders.push({ type: 'cuboid', center: p.clone().add({ x: 0, y: -0.05, z: 0 }), half: [0.2, 0.05, 0.2], yaw: 0, cameraIgnore: true });
     perches.push(p);
   }
-  for (let i = 0; i < 36; i++) {
-    const a = (i / 36) * Math.PI * 2;
-    const x = Math.cos(a) * BOUNDARY_RADIUS, z = Math.sin(a) * BOUNDARY_RADIUS;
+  for (let i = 0; i < 120; i++) {
+    const a = (i / 120) * Math.PI * 2;
+    const x = Math.cos(a) * WORLD_RADIUS, z = Math.sin(a) * WORLD_RADIUS;
     // tall enough that the bird can't fly over (PlayerController's ceiling is lower)
-    colliders.push({ type: 'cuboid', center: new THREE.Vector3(x, heightAt(x, z) + 7, z), half: [0.4, 9, 1.4], yaw: -a, cameraIgnore: true });
+    colliders.push({ type: 'cuboid', center: new THREE.Vector3(x, heightAt(x, z) + 40, z), half: [0.5, 60, 3.4], yaw: -a, cameraIgnore: true });
   }
 
   const glowMats = { door: lib.LS_SpiritGlow, rune: lib.LS_Rune };
   const baseEmissive = { door: lib.LS_SpiritGlow.emissiveIntensity, rune: lib.LS_Rune.emissiveIntensity };
 
-  function update(dt, t) {
+  function update(dt, t, camera, player) {
     stream.update();
+    lod.update(dt, camera.position);
+    grass.update(player);
+    followShadow(player);
+    waterfall.update(t);
+    // the hollow's giant mushrooms are heavy meshes: only drawn when Mori could see them
+    for (const m of areas.giants.children) m.visible = m.position.distanceToSquared(camera.position) < 90 * 90;
+    for (const sh of areas.shrines) { // awake goes 0 -> 1 when Mori wakes the shrine (Spirits.js)
+      sh.mat.emissiveIntensity = 0.15 + sh.awake * (2.6 + 0.4 * Math.sin(t * 1.6));
+      sh.light.intensity = sh.awake * 6;
+      sh.beam.material.opacity = sh.awake * (0.07 + 0.03 * Math.sin(t * 1.1 + sh.position.x));
+    }
+    for (const gp of areas.glowParts) {
+      const awake = areas.shrines.find((sh) => sh.area === gp.area)?.awake ?? 0;
+      if (gp.light) gp.light.intensity = gp.base * (0.5 + awake * 0.8) * (0.9 + 0.1 * Math.sin(t * 1.3));
+      if (gp.material) gp.material.emissiveIntensity = gp.base + awake * gp.awake;
+    }
     for (const k in pulses) pulses[k] = Math.max(0, pulses[k] - dt * 0.6);
     for (const k of ['door', 'rune']) {
       glowMats[k].emissiveIntensity = baseEmissive[k] * (0.85 + 0.15 * Math.sin(t * 1.7 + (k === 'rune' ? 1 : 0))) * (1 + pulses[k] * 2.5);
@@ -316,7 +312,7 @@ export function createWorld({ scene, renderer, models }) {
   }
 
   return {
-    sun, colliders, interactables, update, heightAt, stream, perches,
+    sun, colliders, interactables, update, heightAt, stream, perches, areas, waterfall,
     flowerSpots: LILY_PATCHES.map(([x, z]) => new THREE.Vector3(x, heightAt(x, z), z)),
     mushroomCenter: new THREE.Vector3(-6.3, heightAt(-6.3, -1.2) + 0.6, -1.2),
     trigger(key) { pulses[key] = 1; },

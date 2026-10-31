@@ -1,7 +1,19 @@
 # Little Spirit — Whispers of the Grove
 
-A tiny cozy 3D clearing where you play Mori, a little forest spirit who can become a fox or a bird.
-No missions, no timers: walk, run, fly, perch, sit on a rock and watch the butterflies. Three.js + Rapier + Vite.
+A cozy 3D forest where you play Mori, a little forest spirit who can become a fox or a bird. No missions,
+no timers, nothing to fail: walk, run, fly, perch, sit on a rock and watch the butterflies. Three.js + Rapier + Vite.
+
+**The world** (~240 m across, ringed by mountains): the Whispering Grove with the ancient tree at the centre;
+forested hills around it; a river from **Whisper Falls** at the mountains' feet, through the grove, into
+**Mirror Lake** (shallow enough to wade, stepping stones out to a flat rock); **Mushroom Hollow**, a dell of
+giant glowing mushrooms with bouncy caps; **Windy Overlook**, a plateau with a ring of standing stones; and
+**Sunny Meadow** in bloom. Dirt trails link them all.
+
+**Things to do, if you like:** 40 wisps of spirit light rest all over the world (on rocks, mushroom caps,
+the tree tops, over the water, behind the falls: some need wings or a bounce). Five dormant shrines wait in
+the far places, and only Mori's spirit form can wake them. A woken shrine lights its place and its wisps shine
+brighter, and waking all five makes the grove celebrate. The fox can sniff out the nearest wisp (F). Each
+place's name drifts in the first time you arrive. Progress is part of the save.
 
 ```bash
 npm install
@@ -9,21 +21,22 @@ npm run dev      # http://localhost:5173
 npm run build    # static site in dist/ (GitHub Pages: .github/workflows/deploy.yml)
 ```
 
-**Controls:** WASD move · mouse look (click to capture) · Space jump · Shift run · 1 / 2 / 3 spirit, fox, bird (Q cycles) · E interact, sit, rest · Esc pause · M sound · H hints · wheel zoom.
+**Controls:** WASD move · mouse look (click to capture) · Space jump · Shift run · 1 / 2 / 3 spirit, fox, bird (Q cycles) · E interact, sit, rest, wake a shrine · F sniff (fox) · Esc pause · M sound · H hints · wheel zoom.
 **Bird:** Space takes off and climbs (tap for a single wingbeat) · release to glide · C or Ctrl dives · Shift flies faster · touch down on anything (rocks, the lantern roofs, the top of the ancient tree) to perch.
 
-The title menu has New Game, Continue (when a save exists), Settings (master and music volume, mouse sensitivity, graphics quality) and Credits. Settings and one save slot (position, facing, form; written every few seconds and on pause) live in the browser's localStorage.
+The title menu has New Game, Continue (when a save exists), Settings (master and music volume, mouse sensitivity, graphics quality) and Credits. Settings and one save slot (position, facing, form, wisps and shrines; written every few seconds and on pause) live in the browser's localStorage.
 
 ## Code map
 
 | Path | What |
 |---|---|
-| `src/main.js` | boot, game loop, pause and save, interaction prompts, seats, Mori's glances and dozing |
-| `src/world/` | terrain + stream (`terrain.js`; `water.js`: caustics by area-ratio splatting, sun glints and depth absorption, adapted from [Ultra-Water](https://github.com/Humpalumps/Ultra-Water), MIT), light/sky (`lighting.js`), grass + leaf fringe (`vegetation.js`), asset placement and static batching (`createWorld.js`, `assetKit.js`), the surrounding forest and clearing dressing from the MegaKit as instanced meshes with wind (`megakit.js`) |
+| `src/main.js` | boot, game loop, pause and save, adaptive resolution, interaction prompts, seats, Mori's glances and dozing |
+| `src/world/` | the world's layout, height (one 0.5 m grid shared by the terrain mesh, the Rapier heightfield and the grass) and ground colour, plus where trees and grass grow (`terrain.js`); river, lake, falls pool and waterfall (`water.js`; `water.js`: caustics by area-ratio splatting, sun glints and depth absorption, adapted from [Ultra-Water](https://github.com/Humpalumps/Ultra-Water), MIT), light/sky and shadows that follow Mori (`lighting.js`), grass that travels with the player and the leaf fringe (`vegetation.js`), asset placement and static batching (`createWorld.js`, `assetKit.js`), the forest (`forest.js` places it; `megakit.js` draws it: near trees as geometry, far ones as billboards baked at load), the far places with their shrines and wisp spots (`areas.js`) |
 | `src/player/` | Rapier character controller with bird flight (`PlayerController.js`), clip-based animation (`CharacterAnimator.js`: AnimationMixer + procedural lean/tail/ears; `BirdAnimator.js`: hop, flap/glide blend, pitch and bank), Mori model setup, anime cel shading + ink outline (`toonMaterial.js`), forms and the change between them (`Forms.js`) |
 | `src/camera/FollowCamera.js` | third-person orbit camera with collision; pulls back and widens in flight |
 | `src/effects/` | fireflies/spores/leaves/god rays, butterflies that come to circle Mori (`Butterflies.js`), bloom + grade |
-| `src/ui/ControlsOverlay.js`, `src/core/Storage.js` | title / pause / settings / credits menus, form HUD, hints; settings and the save slot |
+| `src/gameplay/Spirits.js` | wisps, shrines, the fox's sniffing, place names, the celebration; save state |
+| `src/ui/ControlsOverlay.js`, `src/core/Storage.js` | title / pause / settings / credits menus, form HUD, wisp and shrine counters, place titles, hints; settings and the save slot |
 | `src/audio/Ambience.js` | Web Audio mix: calm music, birds-and-wind and a stream loop that swells near the water (CC0 tracks below), plus synthesized steps and chimes |
 
 ## Asset pipeline (Blender 5.2)
@@ -62,7 +75,10 @@ npm run assets   # rebuild every runtime model headless
 - **Forms:** spirit and fox (mesh2motion fox rig, Auto-Rig Pro weights for the spirit), then the bird (mesh2motion bird rig) with a real flight controller: takeoff, climb, glide, dive, soft ceiling, perching on any surface; the ancient tree's upper crown is solid so flights go under it or land on top rather than through a wall of leaves.
 - **World:** the Blender-built background trees were replaced by MegaKit trees, undergrowth and rocks drawn as instanced meshes (~44 draw calls); the clearing got ferns, flower clumps, clover, bank plants and pebbles. Steady 60 fps in the dev browser at 1.5× pixel ratio.
 - **Presentation:** title menu with Continue, settings (volumes, sensitivity, quality: Low drops bloom and sun shadows and renders at 0.8× pixel ratio), pause on Esc or when pointer lock is released, form HUD, a flight-controls toast, butterflies, seats on two rocks and by the tree, Mori glancing at nearby things and dozing after a long rest.
-- **Known gaps:** the fox still uses distance weights (no Auto-Rig Pro pass yet); the bird's idle folds the wings into narrow spikes because the template wing has a much longer chord than Mori's.
+- **Bigger world:** the grove became the centre of a ~240 m valley (heightfield physics, one height grid for terrain/physics/grass), a river with falls and a lake, four new places, trails, mountains beyond the walkable ring, ~700 MegaKit trees (real geometry within 40 m, baked billboards out to 260 m, trunk colliders), undergrowth that appears near the camera, and grass that travels with Mori. Wisps, shrines and the fox's nose give it optional goals.
+- **Fixes:** the bird's head no longer spins (its look-around turn compounded every frame on bones the mixer didn't rewrite); its resting wings close only part way instead of folding into spikes; Mori no longer walks through tree trunks; the invisible wall around the grove is gone.
+- **Performance:** in the dev browser (727×683 window, 1.5× pixel ratio) a frame takes 13–16 ms on the GPU; bloom is ~4.5 ms of that (pass count, not pixels: it runs at a quarter resolution now). Resolution adapts down when frames run long. Not yet measured on other machines.
+- **Known gaps:** the fox still uses distance weights (no Auto-Rig Pro pass yet); shadows only cover ~28 m around Mori; the far mountains are coarse geometry seen through haze.
 
 ## Audio credits
 

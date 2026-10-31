@@ -94,3 +94,19 @@ body { font-family: 'Nunito', system-ui, sans-serif; color: var(--ink); user-sel
   .ls-forms { right: 16px; top: 14px; }
   .ls-toast { right: 16px; top: 52px; }
 }
+
+/* ---- progress and place names */
+.ls-progress {
+  position: absolute; left: 22px; top: 20px; display: flex; gap: 14px; padding: 6px 14px; border-radius: 999px;
+  background: var(--panel); backdrop-filter: blur(6px); font-size: 13px; letter-spacing: 0.04em; transition: opacity 1s ease;
+}
+.ls-progress span:first-child { color: #c6fbff; text-shadow: 0 0 10px rgba(143, 243, 255, 0.6); }
+.ls-progress.hidden { opacity: 0; }
+.ls-area {
+  position: absolute; left: 50%; top: 22%; transform: translate(-50%, -50%); white-space: nowrap;
+  font-family: 'Cormorant Garamond', serif; font-size: clamp(30px, 4.6vw, 58px); letter-spacing: 0.04em;
+  text-shadow: 0 0 22px rgba(143, 243, 255, 0.45), 0 2px 10px rgba(0, 0, 0, 0.55);
+  opacity: 0; transition: opacity 1.4s ease; pointer-events: none;
+}
+.ls-area.visible { opacity: 1; }
+@media (max-width: 640px) { .ls-progress { left: 16px; top: 14px; } .ls-area { white-space: normal; text-align: center; width: calc(100% - 32px); } }

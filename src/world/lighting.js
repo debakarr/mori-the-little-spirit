@@ -4,22 +4,23 @@ export const SUN_DIR = new THREE.Vector3(-0.62, 0.48, 0.62).normalize();
 const ZENITH = new THREE.Color('#5d97d6');
 const HORIZON = new THREE.Color('#f4d8a8');
 export const FOG_COLOR = new THREE.Color('#bfc59c');
+const SHADOW_HALF = 28, SHADOW_DIST = 70; // shadowed square around Mori (m) and sun distance
 export const HEMI = { sky: new THREE.Color('#b9d3ff'), ground: new THREE.Color('#4d5a2c'), intensity: 1.25 };
 
 /** Late-afternoon golden light: warm sun with soft shadows, sky/ground hemisphere fill, haze. */
 export function createLighting(scene, renderer) {
-  scene.fog = new THREE.Fog(FOG_COLOR, 20, 78);
+  scene.fog = new THREE.Fog(FOG_COLOR, 40, 420);
 
   const hemi = new THREE.HemisphereLight(HEMI.sky, HEMI.ground, HEMI.intensity);
   scene.add(hemi);
 
   const sun = new THREE.DirectionalLight('#ffd9a6', 3.2);
-  sun.position.copy(SUN_DIR).multiplyScalar(40);
-  sun.target.position.set(0, 0, -1);
+  sun.position.copy(SUN_DIR).multiplyScalar(SHADOW_DIST);
+  sun.target.position.set(0, 0, 0);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   const s = sun.shadow.camera;
-  s.left = -19; s.right = 19; s.top = 19; s.bottom = -19; s.near = 5; s.far = 90;
+  s.left = -SHADOW_HALF; s.right = SHADOW_HALF; s.top = SHADOW_HALF; s.bottom = -SHADOW_HALF; s.near = 5; s.far = SHADOW_DIST * 2 + 40;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.035;
   sun.shadow.radius = 3;
@@ -40,7 +41,15 @@ export function createLighting(scene, renderer) {
   const envMap = pmrem.fromScene(envScene, 0.02).texture;
   pmrem.dispose();
 
-  return { sun, hemi, envMap };
+  // the shadow map covers the ground around Mori, moved in whole texels so its edges don't shimmer
+  const texel = (SHADOW_HALF * 2) / sun.shadow.mapSize.x;
+  const focus = new THREE.Vector3();
+  function followShadow(p) {
+    focus.set(Math.round(p.x / texel) * texel, Math.round(p.y / texel) * texel, Math.round(p.z / texel) * texel);
+    sun.target.position.copy(focus);
+    sun.position.copy(focus).addScaledVector(SUN_DIR, SHADOW_DIST);
+  }
+  return { sun, hemi, envMap, followShadow };
 }
 
 function createSky() {
@@ -82,7 +91,7 @@ function createSky() {
         gl_FragColor = vec4(col, 1.0);
       }`,
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1100, 32, 16), mat);
   mesh.name = 'Sky';
   mesh.frustumCulled = false;
   return mesh;
@@ -92,8 +101,8 @@ function createSky() {
 function createDistantHills() {
   const group = new THREE.Group();
   [
-    [150, 16, '#7e9a86', 0.55],
-    [210, 26, '#9fb2a8', 0.75],
+    [520, 120, '#8aa49a', 0.55],
+    [700, 170, '#a6b8b0', 0.75],
   ].forEach(([radius, height, color, fade], k) => {
     const seg = 160;
     const pos = [];
@@ -103,7 +112,7 @@ function createDistantHills() {
       const n = Math.sin(a * 3 + k) * 0.35 + Math.sin(a * 7.3 + 1.7 * k) * 0.25 + Math.sin(a * 17.1) * 0.12 + 0.5;
       const h = height * (0.35 + 0.65 * n);
       const x = Math.cos(a) * radius, z = Math.sin(a) * radius;
-      pos.push(x, -6, z, x, h, z);
+      pos.push(x, -20, z, x, h, z);
       if (i < seg) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
     }
     const geo = new THREE.BufferGeometry();

@@ -4,13 +4,14 @@ import { Input } from './core/Input.js';
 import { loadSettings, saveSettings, loadGame, saveGame, clearGame } from './core/Storage.js';
 import { loadModels } from './world/assetKit.js';
 import { createWorld } from './world/createWorld.js';
-import { SPAWN, streamDistance, WATER_Y } from './world/terrain.js';
+import { SPAWN, streamDistance, WATER_Y, AREAS } from './world/terrain.js';
 import { PhysicsWorld } from './physics/PhysicsWorld.js';
 import { Forms } from './player/Forms.js';
 import { PlayerController } from './player/PlayerController.js';
 import { FollowCamera } from './camera/FollowCamera.js';
 import { EnvironmentEffects } from './effects/EnvironmentEffects.js';
 import { Butterflies } from './effects/Butterflies.js';
+import { Spirits } from './gameplay/Spirits.js';
 import { createPostFX } from './effects/PostFX.js';
 import { Ambience } from './audio/Ambience.js';
 import { ControlsOverlay } from './ui/ControlsOverlay.js';
@@ -28,7 +29,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 600);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 1500);
 
 const PIXEL_RATIO = { low: 0.8, medium: 1, high: 1.5 };
 const SAVE_EVERY = 5; // seconds
@@ -54,6 +55,7 @@ async function boot() {
   });
   const player = new PlayerController({
     physics, input, mori, spawn, facing: Math.PI,
+    ceiling: (x, z) => world.heightAt(x, z) + 28, // the bird's soft ceiling: over the treetops, under the clouds
     events: {
       onJump: () => audio.whoosh(true),
       onFlap: () => audio.whoosh(true),
@@ -76,12 +78,30 @@ async function boot() {
   follow.snap(player.position);
   const post = createPostFX(renderer, scene, camera);
 
+  // adaptive resolution: under the quality setting's pixel ratio, render a bit smaller while frames run
+  // long and creep back up when there's headroom, so slower machines stay smooth
+  let resScale = 1, quality = settings.quality, perfTime = 0, perfFrames = 0, perfSum = 0;
+  const applyResolution = () => {
+    renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_RATIO[quality] ?? 1) * resScale);
+    renderer.setSize(innerWidth, innerHeight);
+    post.setSize(innerWidth, innerHeight);
+  };
+  function adaptResolution(rawDt) {
+    if (rawDt > 0.1) return; // a hitch or a hidden tab says nothing about steady load
+    perfSum += rawDt;
+    perfFrames++;
+    if ((perfTime += rawDt) < 2) return;
+    const avg = perfSum / perfFrames;
+    perfTime = perfSum = perfFrames = 0;
+    const next = avg > 0.019 ? Math.max(0.6, resScale - 0.1) : avg < 0.013 ? Math.min(1, resScale + 0.05) : resScale;
+    if (next !== resScale) { resScale = next; applyResolution(); }
+  }
+
   function applySettings(s) {
     audio.setVolume(s);
     follow.sensitivity = s.sensitivity;
-    renderer.setPixelRatio(Math.min(devicePixelRatio, PIXEL_RATIO[s.quality] ?? 1));
-    renderer.setSize(innerWidth, innerHeight);
-    post.setSize(innerWidth, innerHeight);
+    quality = s.quality;
+    applyResolution();
     post.bloom.enabled = s.quality !== 'low';
     world.sun.castShadow = s.quality !== 'low';
     saveSettings(s);
@@ -95,7 +115,7 @@ async function boot() {
   const lockPointer = () => canvas.requestPointerLock?.()?.catch?.(() => {});
   const save = () => {
     if (started && !mori.change && !player.flying && player.grounded) {
-      saveGame({ position: player.position.toArray(), yaw: player.yaw, form: mori.name });
+      saveGame({ position: player.position.toArray(), yaw: player.yaw, form: mori.name, spirits: spirits.state() });
     }
   };
   let pausedAt = 0;
@@ -121,6 +141,11 @@ async function boot() {
   input.on('Digit2', () => canAct() && mori.transform('fox'));
   input.on('Digit3', () => canAct() && mori.transform('bird'));
   input.on('KeyH', () => ui.toggleHints());
+  input.on('KeyF', () => {
+    if (!canAct()) return;
+    if (mori.name === 'fox') spirits.startSniff(player.position);
+    else ui.toast('Only the fox can sniff out wisps (2).', 2.5);
+  });
   // one Esc can arrive both as the lock release below and as a keypress: count it once
   input.on('Escape', () => { if (performance.now() - pausedAt > 300) setPaused(!paused); });
   // the browser releases pointer lock on Esc without always passing the key on: treat that as pause
@@ -142,6 +167,7 @@ async function boot() {
       if (s) {
         player.teleport(new THREE.Vector3(...s.position), s.yaw ?? player.yaw);
         mori.setForm(s.form ?? 'spirit');
+        spirits.load(s.spirits);
         follow.yaw = player.yaw + Math.PI;
         follow.snap(player.position);
       }
@@ -158,6 +184,7 @@ async function boot() {
     it.position.y = physics.groundBelow(it.position.x, it.position.y + 4, it.position.z, 8) ?? it.position.y;
   }
   const butterflies = new Butterflies(scene, { heightAt: world.heightAt, homes: world.flowerSpots });
+  const spirits = new Spirits({ scene, world, physics, effects, audio, ui });
 
   function frame(now) {
     timer.update(now);
@@ -205,7 +232,9 @@ async function boot() {
       promptPos.copy(near.position).add({ x: 0, y: 0.9, z: 0 }).project(camera);
       ui.showPrompt(promptPos.z < 1 ? { x: (promptPos.x * 0.5 + 0.5) * innerWidth, y: (-promptPos.y * 0.5 + 0.5) * innerHeight } : null, near.label);
       const pressed = input.consumeInteract();
-      if (pressed && near.seat) {
+      if (pressed && near.key === 'shrine') {
+        spirits.awaken(near.shrine, mori.name);
+      } else if (pressed && near.seat) {
         player.teleport(near.position, near.yaw);
         mori.animator.sitNow();
         audio.step(false, 0);
@@ -237,12 +266,16 @@ async function boot() {
     mori.setGlow((2.4 + 0.5 * Math.sin(t * (2.1 - dozing * 1.3)) + player.runBlend * 0.9) * (1 - dozing * 0.4));
     butterflies.update(dt, t, player.position);
     if (mori.tailBone) mori.tailBone.getWorldPosition(tailPos);
-    world.update(dt, t);
+    world.update(dt, t, camera, player.position);
+    if (canAct()) spirits.update(dt, t, player.position);
     effects.update(dt, t, camera, { tail: mori.tailBone ? tailPos : null, speed: player.speed });
-    audio.update(dt, t, streamDistance(player.position.x, player.position.z));
+    // water sound: the stream nearby, and the falls carry much further
+    const fallsDist = Math.hypot(player.position.x - AREAS.falls.x, player.position.z - AREAS.falls.z);
+    audio.update(dt, t, Math.min(streamDistance(player.position.x, player.position.z), fallsDist * 0.35));
     ui.update(dt, player.speed > 0.5);
 
     post.render();
+    adaptResolution(timer.getDelta() || dt);
 
     frames++;
     if ((fpsTime += dt) > 1) { fps = frames / fpsTime; frames = 0; fpsTime = 0; }

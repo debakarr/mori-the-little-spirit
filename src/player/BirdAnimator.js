@@ -96,7 +96,12 @@ export class BirdAnimator {
       Glide: air * (1 - this.flap),
     };
     for (const [n, a] of Object.entries(A)) a.setEffectiveWeight(w[n] ?? 0);
+    // the mixer only writes a bone when its animated value changes, so put the clip pose back before
+    // turning the head again, or the turn compounds every frame and the head spins
+    const head = this.bones.head;
+    if (head && this._headBase) head.quaternion.copy(this._headBase);
     this.mixer.update(dt);
+    if (head) (this._headBase ??= new THREE.Quaternion()).copy(head.quaternion);
 
     // head looks around while perched
     const L = this.look;
@@ -106,7 +111,6 @@ export class BirdAnimator {
       L.tYaw = (Math.random() - 0.5) * 1.4;
     }
     L.yaw = lerp(L.yaw, L.tYaw * ground * (1 - moving), damp(6, dt));
-    const head = this.bones.head;
     if (head) head.quaternion.premultiply(this._q.setFromAxisAngle(Y, L.yaw));
 
     // flight attitude: lean into the flight direction, nose up when climbing, bank into turns

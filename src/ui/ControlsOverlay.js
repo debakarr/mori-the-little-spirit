@@ -57,6 +57,8 @@ export class ControlsOverlay {
         ${FORMS.map(([k, l], i) => `<div class="ls-form" data-form="${k}"><span class="ls-key">${i + 1}</span>${l}</div>`).join('')}
       </div>
       <div class="ls-toast" id="ls-toast"></div>
+      <div class="ls-progress hidden" id="ls-progress"></div>
+      <div class="ls-area" id="ls-area"></div>
       <div class="ls-hints hidden" id="ls-hints">
         <span class="ls-hint"><span class="ls-key">W</span><span class="ls-key">A</span><span class="ls-key">S</span><span class="ls-key">D</span> move</span>
         <span class="ls-hint"><span class="ls-key">Mouse</span> look</span>
@@ -64,6 +66,7 @@ export class ControlsOverlay {
         <span class="ls-hint"><span class="ls-key">Shift</span> run</span>
         <span class="ls-hint"><span class="ls-key">1</span><span class="ls-key">2</span><span class="ls-key">3</span> transform</span>
         <span class="ls-hint"><span class="ls-key">E</span> interact</span>
+        <span class="ls-hint"><span class="ls-key">F</span> sniff (fox)</span>
         <span class="ls-hint"><span class="ls-key">Esc</span> pause</span>
         <span class="ls-hint"><span class="ls-key">M</span> sound</span>
       </div>
@@ -78,6 +81,9 @@ export class ControlsOverlay {
     this.creditsEl = $('ls-credits');
     this.formsEl = $('ls-forms');
     this.toastEl = $('ls-toast');
+    this.progressEl = $('ls-progress');
+    this.areaEl = $('ls-area');
+    this.areaTimer = 0;
     this.hints = $('ls-hints');
     this.prompt = $('ls-prompt');
     this.promptLabel = $('ls-prompt-label');
@@ -123,6 +129,7 @@ export class ControlsOverlay {
       this.start.classList.add('hidden');
       this.hints.classList.remove('hidden');
       this.formsEl.classList.remove('hidden');
+      this.progressEl.classList.remove('hidden');
       fn();
     };
     this.titleMenu.querySelector('[data-act="new"]').addEventListener('click', () => begin(onNew));
@@ -163,6 +170,18 @@ export class ControlsOverlay {
     for (const el of this.formsEl.children) el.classList.toggle('active', el.dataset.form === name);
   }
 
+  /** Wisps gathered and shrines woken, top left. */
+  setProgress({ wisps, total, shrines, shrineTotal }) {
+    this.progressEl.innerHTML = `<span title="Wisps">✦ ${wisps} / ${total}</span><span title="Shrines awake">◈ ${shrines} / ${shrineTotal}</span>`;
+  }
+
+  /** A place's name (or a moment) drifting in across the middle of the screen. */
+  areaTitle(text, seconds = 3.6) {
+    this.areaEl.textContent = text;
+    this.areaEl.classList.add('visible');
+    this.areaTimer = seconds;
+  }
+
   /** A short line under the form indicators (e.g. flight controls when becoming the bird). */
   toast(text, seconds = 4) {
     this.toastEl.textContent = text;
@@ -176,6 +195,7 @@ export class ControlsOverlay {
     if (moving) this.hintTimer += dt;
     if (this.hintTimer > 12) this.hints.classList.add('hidden');
     if (this.toastTimer > 0 && (this.toastTimer -= dt) <= 0) this.toastEl.classList.remove('visible');
+    if (this.areaTimer > 0 && (this.areaTimer -= dt) <= 0) this.areaEl.classList.remove('visible');
   }
 
   toggleHints() {
