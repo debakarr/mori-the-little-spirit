@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mori Animation Preview</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #20262b; color: #dde6ea; font: 13px system-ui, sans-serif; overflow: hidden; }
+      canvas { display: block; }
+      #ui { position: fixed; left: 12px; top: 12px; display: grid; gap: 6px; background: #0008; padding: 10px; border-radius: 8px; }
+      #ui label { display: flex; gap: 8px; align-items: center; }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <label>speed <input id="speed" type="range" min="0" max="5" step="0.1" value="0" /> <span id="sv">0</span> m/s</label>
+      <label><input id="air" type="checkbox" /> airborne</label>
+      <div><button data-play="Howl">Howl</button> <button data-play="Idle Alert">Alert</button> <button id="land">Land</button></div>
+      <label>view <select id="view"><option>side</option><option>front</option><option>three-quarter</option></select></label>
+    </div>
+    <script type="module">
+      // Dev-only: drives Mori's CharacterAnimator with a speed slider and a fixed camera.
+      // Open http://localhost:5173/tools/anim-preview.html while `npm run dev` is running.
+      import * as THREE from 'three';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+      import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+      import { createMori } from '../src/player/Mori.js';
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      document.body.appendChild(renderer.domElement);
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color('#3a4650');
+      scene.add(new THREE.HemisphereLight('#cfe6ff', '#4a3c30', 1.6));
+      const sun = new THREE.DirectionalLight('#fff1dc', 2.2);
+      sun.position.set(2, 4, 3);
+      scene.add(sun);
+      const grid = new THREE.GridHelper(20, 80, '#6d7a84', '#4c5862');
+      scene.add(grid);
+      const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 50);
+
+      const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+      const mori = createMori(await loader.loadAsync('../public/models/mori.glb'));
+      scene.add(mori.object);
+
+      const $ = (id) => document.getElementById(id);
+      const state = { speed: 0, air: false, vy: 0, view: 'side' };
+      $('speed').oninput = (e) => { state.speed = +e.target.value; $('sv').textContent = state.speed.toFixed(1); };
+      $('air').onchange = (e) => { state.air = e.target.checked; if (!state.air) mori.animator.land(5); };
+      $('land').onclick = () => mori.animator.land(8);
+      $('view').onchange = (e) => { state.view = e.target.value; };
+      for (const b of document.querySelectorAll('[data-play]')) b.onclick = () => mori.animator.play(b.dataset.play);
+      window.__preview = { state, mori, camera };
+
+      const resize = () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); };
+      addEventListener('resize', resize);
+      resize();
+
+      const timer = new THREE.Timer();
+      let x = 0;
+      renderer.setAnimationLoop((now) => {
+        timer.update(now);
+        const dt = Math.min(timer.getDelta(), 0.05);
+        const t = timer.getElapsed();
+        x += state.speed * dt;
+        grid.position.z = -(x % 0.25); // ground scrolls under Mori so foot slide is visible
+        mori.animator.update(dt, {
+          speed: state.speed, runBlend: THREE.MathUtils.smoothstep(state.speed, 2.3, 4.9), grounded: !state.air,
+          vy: state.air ? Math.cos(t * 3) * 4 : 0, yawRate: 0, accel: 0,
+        });
+        const dir = { side: [2.4, 0.45, 0], front: [0, 0.45, 2.4], 'three-quarter': [1.7, 0.7, 1.7] }[state.view];
+        camera.position.set(...dir);
+        camera.lookAt(0, 0.32, 0);
+        renderer.render(scene, camera);
+      });
+    </script>
+  </body>
+</html>
