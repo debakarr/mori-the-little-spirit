@@ -16,7 +16,7 @@ npm run build    # static site in dist/ (GitHub Pages: .github/workflows/deploy.
 |---|---|
 | `src/main.js` | boot, game loop, interaction prompts |
 | `src/world/` | terrain + stream (`terrain.js`; `water.js`: caustics by area-ratio splatting, sun glints and depth absorption, adapted from [Ultra-Water](https://github.com/Humpalumps/Ultra-Water), MIT), light/sky (`lighting.js`), grass + leaf fringe (`vegetation.js`), asset placement and static batching (`createWorld.js`, `assetKit.js`) |
-| `src/player/` | Rapier character controller, clip-based animation (AnimationMixer + procedural lean/tail/ears), Mori model setup |
+| `src/player/` | Rapier character controller, clip-based animation (AnimationMixer + procedural lean/tail/ears), Mori model setup, anime cel shading + ink outline (`toonMaterial.js`), forms and the change between them (`Forms.js`: Q / 1 / 2) |
 | `src/camera/FollowCamera.js` | third-person orbit camera with collision |
 | `src/effects/` | fireflies/spores/leaves/god rays, bloom + grade |
 | `src/audio/Ambience.js` | Web Audio mix: calm music, birds-and-wind and a stream loop that swells near the water (CC0 tracks below), plus synthesized steps and chimes |
@@ -30,7 +30,10 @@ npm run assets   # rebuild every runtime model headless
 ```
 
 - `tools/blender/prepare_mori_new.py -- --unrigged art/mesh2motion/mori_unrigged.glb` — the painted Mori sculpt (`mori-new.glb`, 2M tris) → 40k tris, 2K textures and an emissive map pulled from the painted cyan.
-- `tools/blender/rig_mori_mesh2motion.py` — rigs that mesh with [mesh2motion](https://app.mesh2motion.org/)'s fox skeleton and animates it with its fox clip library (CC0, `art/mesh2motion/fox-animations.glb`): the skeleton is fitted in the fox's Sit pose (the sculpt sits), clips are retargeted onto a crouched chibi stance with feet kept on the ground → `mori.glb` (Idle, Idle Alert, Walk, Run, Sit, Howl, Fall, Jump, Sneak).
+- `tools/blender/rig_mori_mesh2motion.py` — rigs that mesh with [mesh2motion](https://app.mesh2motion.org/)'s fox skeleton and animates it with its fox clip library (CC0, `art/mesh2motion/fox-animations.glb`): the skeleton is fitted in the fox's Sit pose (the sculpt sits), clips are retargeted onto a crouched chibi stance with feet kept on the ground → `mori.glb` (Idle, Idle Alert, Walk, Run, Sit, Howl, Fall, Jump, Sneak). Skin weights come from `art/mesh2motion/mori_arp_weights.npz` when present, and the mesh gets smoothed normals for the cel shading (`toon_mori.py`).
+- `tools/blender/prepare_fox.py` + `rig_mori_mesh2motion.py -- --form fox` — the fox form (`fox-mori.glb`, painted) → `fox.glb`: same skeleton and clips, bound in the template's standing rest pose.
+- `tools/blender/arp_weights_mori.py` — run in a live Blender with [Auto-Rig Pro](https://lucky3d.fr/auto-rig-pro/doc/index.html) (`python3 tools/blender/mcp_run.py --file tools/blender/arp_weights_mori.py`): fits ARP's dog rig to Mori, binds a watertight voxel copy with ARP's heat map (the raw sculpt's overlapping fur shells defeat bone heat) and writes those weights, mapped onto the game skeleton, to `mori_arp_weights.npz`.
+- `tools/blender/toon_mori.py` — smoothed normals for the game's cel shading, plus a Blender look-dev preview (Shader-to-RGB ramp, rim, inverted-hull outline).
 - `tools/anim-preview.html` — dev-only animation preview (speed slider, emotes, fixed camera): `http://localhost:5173/tools/anim-preview.html`.
 - `tools/blender/prepare_mushroom_new.py` — the painted mushroom cluster (`mushroom-new.glb`) → 24k tris + glow map → `glow_mushroom.glb`.
 - `tools/blender/prepare_grass_patch.py` — the painted grass/flower patch (`grass.glb`) → 12k tris → `grass_patch.glb`, scattered as ground clumps.

@@ -13,6 +13,7 @@ export class ControlsOverlay {
         <span class="ls-hint"><span class="ls-key">Space</span> jump</span>
         <span class="ls-hint"><span class="ls-key">Shift</span> run</span>
         <span class="ls-hint"><span class="ls-key">E</span> interact</span>
+        <span class="ls-hint"><span class="ls-key">Q</span> transform</span>
         <span class="ls-hint"><span class="ls-key">M</span> sound</span>
       </div>
       <div class="ls-prompt" id="ls-prompt"><span class="ls-key">E</span><span id="ls-prompt-label"></span></div>`;

@@ -3,14 +3,20 @@
 Sources:  art/mesh2motion/mori_unrigged.glb  (prepare_mori_new.py --unrigged: 40k tris, textured, feet at origin)
           art/mesh2motion/fox-animations.glb (CC0, github.com/scottpetrovic/mesh2motion-app static/animations:
                                               the fox template skeleton plus its clip library)
-Output:   public/models/mori.glb  (skinned to the 45-bone fox skeleton, clips listed in CLIPS)
+Output:   public/models/mori.glb  (skinned to the 45-bone fox skeleton, clips listed in CLIPS,
+                                   smoothed normals for the game's cel shading: toon_mori.py)
 
-Run:  blender -b --factory-startup --python tools/blender/rig_mori_mesh2motion.py [-- --debug DIR]
+Run:  blender -b --factory-startup --python tools/blender/rig_mori_mesh2motion.py [-- --form fox] [--debug DIR]
+
+--form fox rigs the fox form instead (art/mesh2motion/fox_unrigged.glb from prepare_fox.py ->
+public/models/fox.glb). The fox stands like the template, so its bind pose is the template's rest
+pose and the clips play unscaled: only the joints move to the chibi fox's proportions.
 
 The mesh2motion app (app.mesh2motion.org) fits a template skeleton into a mesh, skins it and plays
 its clip library on it. Mori is sculpted sitting, so the skeleton is fitted in the fox's own Sit pose:
 1. bind pose = the fox's last Sit frame, with every joint moved into Mori's body (orientations kept),
-2. skin to that pose (distance-to-bone-segment weights, top 4 influences),
+2. skin to that pose: Auto-Rig Pro heat-map weights from art/mesh2motion/mori_arp_weights.npz
+   (arp_weights_mori.py) when present, else distance-to-bone-segment weights; top 4 influences,
 3. retarget each clip by copying the fox's per-frame bone orientations onto Mori's proportions;
    hips sway is scaled to Mori's size and the lowest foot is kept on the ground.
 The Sit clip therefore lands exactly on the sculpt, and Walk/Run unfold Mori into a standing gait.
@@ -26,12 +32,17 @@ for s in ("blender-asset-qa", "blender-export-pipelines"):
     sys.path.append(os.path.join(SKILLS, s, "scripts"))
 import qa_check  # noqa: E402
 import export_asset  # noqa: E402
+sys.path.insert(0, HERE)
+import toon_mori  # noqa: E402
 
 MESH = os.path.join(ROOT, "art", "mesh2motion", "mori_unrigged.glb")
 ANIMS = os.path.join(ROOT, "art", "mesh2motion", "fox-animations.glb")
 OUT = os.path.join(ROOT, "public", "models", "mori.glb")
+ARP_WEIGHTS = os.path.join(ROOT, "art", "mesh2motion", "mori_arp_weights.npz")
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 DEBUG = argv[argv.index("--debug") + 1] if "--debug" in argv else None
+FORM = argv[argv.index("--form") + 1] if "--form" in argv else "spirit"
+BIND_CLIP = "Sit"  # template clip whose last frame is the bind pose (None: the template's rest pose)
 
 CLIPS = ["Idle", "Idle Alert", "Walk", "Run", "Jump", "Fall", "Sit", "Howl", "Sneak"]
 SWAY = 0.19  # Mori leg length / fox leg length: scales the fox's hips travel
@@ -59,6 +70,52 @@ J = {
     "Tail_Base": (-0.06, 0.16, 0.07), "Tail_Mid": (-0.17, 0.24, 0.08), "Tail_Mid.001": (-0.27, 0.29, 0.12),
     "Tail_End": (-0.3, 0.29, 0.21), "Tail_Tip": (-0.28, 0.28, 0.29),
 }
+
+if FORM == "fox":
+    MESH = os.path.join(ROOT, "art", "mesh2motion", "fox_unrigged.glb")
+    OUT = os.path.join(ROOT, "public", "models", "fox.glb")
+    ARP_WEIGHTS = os.path.join(ROOT, "art", "mesh2motion", "fox_arp_weights.npz")
+    BIND_CLIP, UNFOLD, SWING = None, {}, {}
+    SWAY = 0.2  # chibi fox leg (0.2 m) / template leg (1 m)
+    # Joints in the standing fox (prepare_fox.py space: paws at z=0 under the body centre, 0.8 m tall,
+    # faces -Y), read off its ortho renders: short legs, big head, the flame tail plume curls up behind.
+    J = {
+        "root": (0, 0.03, 0),
+        "Hips": (0, 0.15, 0.21), "Spine_1": (0, 0.08, 0.21), "Spine_2": (0, 0.0, 0.21),
+        "Spine_2.001": (0, -0.07, 0.22), "Spine_3": (0, -0.12, 0.25), "Spine_4": (0, -0.14, 0.29),
+        "Head": (0, -0.15, 0.33), "Nose": (0, -0.28, 0.32), "Head.tip": (0, -0.34, 0.31),
+        "Chin": (0, -0.26, 0.29), "Chin_Tip": (0, -0.30, 0.27),
+        "Ear_L": (0.11, -0.15, 0.58), "Ear_Tip_L": (0.15, -0.16, 0.68),
+        "Stomach": (0, 0.0, 0.15), "Stomach_tip": (0, 0.02, 0.11),
+        "Front_Leg_Shoulder_L": (0.05, -0.08, 0.24), "Front_Leg_Upper_L": (0.08, -0.11, 0.19),
+        "Front_Leg_Lower_L": (0.08, -0.11, 0.11), "Front_Leg_Ankle_L": (0.08, -0.115, 0.035),
+        "Front_Leg_Foot_L": (0.08, -0.13, 0.015), "Front_Leg_Tip_L": (0.08, -0.16, 0.01),
+        "Back_Leg_Pelvis_L": (0.04, 0.08, 0.24), "Back_Leg_Upper_L": (0.09, 0.15, 0.2),
+        "Back_Leg_Lower_L": (0.09, 0.13, 0.13), "Back_Leg_Ankle_L": (0.09, 0.2, 0.08),
+        "Back_Leg_Foot_L": (0.09, 0.19, 0.03), "Back_Leg_Foot_1_L": (0.09, 0.17, 0.012),
+        "Back_Leg_Tip_L": (0.09, 0.15, 0.01),
+        "Tail_Base": (0, 0.22, 0.24), "Tail_Mid": (0, 0.30, 0.23), "Tail_Mid.001": (0, 0.40, 0.27),
+        "Tail_End": (0, 0.48, 0.38), "Tail_Tip": (0, 0.55, 0.55),
+    }
+    FOX_SEG = {
+        "Hips": ("Spine_1", 0.08), "Spine_1": ("Spine_2", 0.08), "Spine_2": ("Spine_2.001", 0.08),
+        "Spine_2.001": ("Spine_3", 0.07), "Spine_3": ("Head", 0.06),
+        "Head": (((0, -0.13, 0.4), (0, -0.13, 0.46)), 0.16),
+        "Tail_Base": ("Tail_Mid", 0.05), "Tail_Mid": ("Tail_Mid.001", 0.08), "Tail_Mid.001": ("Tail_End", 0.12),
+        "Tail_End": ("Tail_Tip", 0.12), "Tail_Tip": ((0, 0.56, 0.7), 0.07),
+    }
+    for side, sx in (("L", 1), ("R", -1)):
+        FOX_SEG |= {
+            f"Ear_{side}": (f"Ear_Tip_{side}", 0.05), f"Ear_Tip_{side}": ((0.19 * sx, -0.17, 0.79), 0.035),
+            f"Front_Leg_Upper_{side}": (f"Front_Leg_Lower_{side}", 0.04),
+            f"Front_Leg_Lower_{side}": (f"Front_Leg_Ankle_{side}", 0.035),
+            f"Front_Leg_Ankle_{side}": (f"Front_Leg_Foot_{side}", 0.03),
+            f"Front_Leg_Foot_{side}": (f"Front_Leg_Tip_{side}", 0.025),
+            f"Back_Leg_Upper_{side}": (f"Back_Leg_Lower_{side}", 0.06),
+            f"Back_Leg_Lower_{side}": (f"Back_Leg_Ankle_{side}", 0.04),
+            f"Back_Leg_Ankle_{side}": (f"Back_Leg_Foot_{side}", 0.03),
+            f"Back_Leg_Foot_{side}": (f"Back_Leg_Tip_{side}", 0.025),
+        }
 for k in [k for k in J if k.endswith("_L")]:
     x, y, z = J[k]
     J[k[:-2] + "_R"] = (-x, y, z)
@@ -83,6 +140,9 @@ for side, sx in (("L", 1), ("R", -1)):
         f"Back_Leg_Ankle_{side}": (f"Back_Leg_Foot_{side}", 0.03),
         f"Back_Leg_Foot_{side}": (f"Back_Leg_Tip_{side}", 0.025),
     }
+
+if FORM == "fox":
+    SEG = FOX_SEG
 
 for o in list(bpy.data.objects):
     bpy.data.objects.remove(o)
@@ -109,11 +169,14 @@ def fox_pose(action, frame):
     return {pb.name: pb.matrix.copy() for pb in fox.pose.bones}
 
 
-sit_act = bpy.data.actions["fox_Sit"]
-SIT = fox_pose(sit_act, sit_act.frame_range[1])
+if BIND_CLIP:
+    sit_act = bpy.data.actions["fox_" + BIND_CLIP]
+    SIT = fox_pose(sit_act, sit_act.frame_range[1])
+else:
+    SIT = {b.name: b.matrix_local.copy() for b in fox.data.bones}
 
 # ---- 1. Mori's rig: fox Sit orientations, joints at Mori's landmarks
-rig = bpy.data.objects.new("MoriRig", bpy.data.armatures.new("MoriRig"))
+rig = bpy.data.objects.new("MoriRig" if FORM == "spirit" else "FoxRig", bpy.data.armatures.new("MoriRig"))
 sc.collection.objects.link(rig)
 bpy.context.view_layer.objects.active = rig
 bpy.ops.object.mode_set(mode="EDIT")
@@ -159,7 +222,7 @@ for clip in CLIPS:
             if n == "Hips":
                 pos = pos + (A[n].translation - SIT[n].translation) * SWAY
             q = A[n].to_quaternion()
-            if clip != "Sit":  # the fox's motion relative to its standing rest, on Mori's crouched stance
+            if clip != BIND_CLIP:  # the fox's motion relative to its standing rest, on Mori's crouched stance
                 delta = q @ FOX_REST[n].inverted()
                 if delta.w < 0:
                     delta.negate()
@@ -215,6 +278,13 @@ for k in range(4):
     keep[order[k], np.arange(nv)] = True
 W = np.where(keep, W, 0)
 W /= W.sum(0)
+if os.path.exists(ARP_WEIGHTS):  # Auto-Rig Pro heat-map weights (tools/blender/arp_weights_mori.py) replace the distance ones
+    arp = np.load(ARP_WEIGHTS)
+    assert arp["positions"].shape == P.shape and np.abs(arp["positions"] - P).max() < 1e-4, "ARP weights are for another mesh"
+    cols = {n: i for i, n in enumerate(arp["bones"])}
+    W = np.array([arp["weights"][:, cols[n]] if n in cols else np.zeros(nv) for n in names])
+    W /= np.maximum(W.sum(0), 1e-9)
+    print("@@SKIN using Auto-Rig Pro weights", ARP_WEIGHTS, "unmapped:", sorted(set(cols) - set(names)))
 for bi, n in enumerate(names):
     vg = ob.vertex_groups.new(name=n)
     for i in np.where(W[bi] > 1e-3)[0]:
@@ -260,6 +330,7 @@ if DEBUG:  # weight colours in the bind pose, then frames of the main clips from
     bpy.data.objects.remove(cam)
     bpy.data.objects.remove(aim)
 
+print("@@NORMALS", toon_mori.smooth_normals(ob))  # clean cel-shading shapes (src/player/toonMaterial.js)
 qa = qa_check.run(objects=["Mori"], profile="game")
 print("@@QA", qa.get("pass"), (qa.get("errors") or [])[:3], "dims", tuple(round(d, 3) for d in ob.dimensions))
 r = export_asset.run(preset="web", objects=[rig.name], out=OUT)

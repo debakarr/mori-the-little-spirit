@@ -1,6 +1,7 @@
 """Run Little Spirit Blender build steps in the *live* Blender session over MCP.
 
 Usage:  python3 tools/blender/mcp_run.py "<python expression using build modules>"
+        python3 tools/blender/mcp_run.py --file tools/blender/arp_weights_mori.py
    e.g. python3 tools/blender/mcp_run.py "build_ancient_tree.build(display=(0, 25, 0))"
         python3 tools/blender/mcp_run.py --screenshot out.png
 
@@ -49,7 +50,10 @@ def run(expr):
 
 
 if __name__ == "__main__":
-    if sys.argv[1] == "--screenshot":
+    if sys.argv[1] == "--file":
+        r = call("execute_blender_code", {"code": open(sys.argv[2]).read()})
+        print(json.dumps(r.get("result", r), indent=1)[:4000])
+    elif sys.argv[1] == "--screenshot":
         r = call("get_screenshot_of_window_as_image", {})
         for c in r["result"]["content"]:
             if c["type"] == "image":

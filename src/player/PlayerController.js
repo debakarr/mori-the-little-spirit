@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 import { clamp, damp, smoothstep } from '../core/noise.js';
 
-const WALK = 2.3;
-const RUN = 4.9;
-const JUMP = 5.5;
 const GRAVITY = 16;
 const BOUNCE = 9.5;
 const RADIUS = 0.22;
@@ -17,7 +14,8 @@ function dampAngle(a, b, k) {
 /**
  * Camera-relative third-person movement on a Rapier kinematic character controller:
  * smoothed acceleration, soft turning, buffered/coyote jumps with variable height,
- * landing detection and bouncy mushroom caps.
+ * landing detection and bouncy mushroom caps. Walk/run speed and jump come from the current form
+ * (`mori.stats`, Forms.js); input pauses while a form change plays.
  */
 export class PlayerController {
   constructor({ physics, input, mori, spawn, facing = Math.PI, events = {} }) {
@@ -50,14 +48,16 @@ export class PlayerController {
     if (!(dt > 1e-4)) return; // first frame can report dt = 0 (rates would become NaN)
     dt = Math.min(dt, 1 / 20);
     const { input } = this;
-    const mv = input.move;
+    const { walk, run, jump } = this.mori.stats;
+    const busy = this.mori.busy;
+    const mv = busy ? { x: 0, y: 0 } : input.move;
     const fx = -Math.sin(cameraYaw), fz = -Math.cos(cameraYaw);
     const rx = Math.cos(cameraYaw), rz = -Math.sin(cameraYaw);
     const wish = this._wish.set(fx * mv.y + rx * mv.x, 0, fz * mv.y + rz * mv.x);
     if (wish.lengthSq() > 1) wish.normalize();
     const wishLen = wish.length();
     const running = input.run && wishLen > 0.1;
-    const target = wish.clone().multiplyScalar(running ? RUN : WALK);
+    const target = wish.clone().multiplyScalar(running ? run : walk);
 
     const rate = this.grounded ? (wishLen > 0.01 ? 9 : 11) : 2.6;
     const k = damp(rate, dt);
@@ -70,11 +70,11 @@ export class PlayerController {
     this.yawRate += (dy / dt - this.yawRate) * damp(10, dt);
 
     // jumping: input buffer + coyote time, shorter hop when Space is released early
-    if (input.consumeJump()) this.jumpBuffer = 0.15;
+    if (input.consumeJump() && !busy) this.jumpBuffer = 0.15;
     this.jumpBuffer -= dt;
     this.coyote -= dt;
     if (this.jumpBuffer > 0 && (this.grounded || this.coyote > 0)) {
-      this.vy = JUMP;
+      this.vy = jump;
       this.grounded = false;
       this.coyote = 0;
       this.jumpBuffer = 0;
@@ -131,7 +131,7 @@ export class PlayerController {
     const accel = (hSpeed - this._prevSpeed) / dt;
     this._prevSpeed = hSpeed;
     this.speed = hSpeed;
-    this.runBlend += (smoothstep(WALK, RUN, hSpeed) - this.runBlend) * damp(6, dt);
+    this.runBlend += (smoothstep(walk, run, hSpeed) - this.runBlend) * damp(6, dt);
 
     const { object, animator } = this.mori;
     object.position.copy(this.position);

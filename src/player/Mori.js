@@ -1,34 +1,36 @@
 import * as THREE from 'three';
-import { patchMaterial } from '../core/shaders.js';
 import { blobShadowTexture } from '../core/textures.js';
 import { CharacterAnimator } from './CharacterAnimator.js';
+import { addOutline, toonMaterial } from './toonMaterial.js';
 
 /**
- * Mori in spirit form: the painted model from public/models/mori.glb, rigged and animated with
- * mesh2motion's fox skeleton and clips (tools/blender/rig_mori_mesh2motion.py). Its glow comes
- * from an emissive map extracted from the painted cyan; we add a soft cyan rim light and a contact shadow.
+ * One of Mori's bodies (spirit: public/models/mori.glb, fox: fox.glb), rigged and animated with
+ * mesh2motion's fox skeleton and clips (tools/blender/rig_mori_mesh2motion.py). It is cel shaded with
+ * an ink outline (toonMaterial.js); its glow comes from an emissive map extracted from the painted cyan.
  */
-export function createMori(gltf) {
+export function createMori(gltf, name = 'Mori') {
   const object = new THREE.Group();
-  object.name = 'Mori';
+  object.name = name;
   const visual = new THREE.Group();
   object.add(visual);
   const model = gltf.scene;
   visual.add(model);
 
   let material = null;
+  let skinned = null;
   model.traverse((o) => {
     if (o.isMesh) {
       material = o.material;
+      skinned = o;
       o.castShadow = true;
       o.receiveShadow = true;
       o.frustumCulled = false;
     }
   });
 
-  material.metalness = 0;
   material.emissive.set('#ffffff');
-  const uniforms = patchMaterial(material, { rim: { color: '#8ff3ff', strength: 0.22, power: 3.2 } });
+  const uniforms = toonMaterial(material);
+  const outline = addOutline(skinned);
   /** Glow pulse: scales the painted emissive map (tail, ear tips, hood accents). */
   const setGlow = (v) => { material.emissiveIntensity = v; };
   setGlow(2.5);
@@ -44,5 +46,12 @@ export function createMori(gltf) {
   let tailBone = null;
   model.traverse((o) => { if (o.isBone && o.name === 'Tail_Tip') tailBone = o; });
 
-  return { object, visual, model, animator, uniforms, setGlow, shadow, tailBone };
+  /** Form-change look: flash to spirit light, dissolve away (0..1 each); the outline hides meanwhile. */
+  const setChange = (flash, dissolve) => {
+    uniforms.uFlash.value = flash;
+    uniforms.uDissolve.value = dissolve;
+    outline.hull.visible = dissolve < 0.02 && flash < 0.5;
+  };
+
+  return { object, visual, model, animator, uniforms, outline, setGlow, setChange, shadow, tailBone };
 }

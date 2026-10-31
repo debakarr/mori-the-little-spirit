@@ -4,12 +4,13 @@ export const SUN_DIR = new THREE.Vector3(-0.62, 0.48, 0.62).normalize();
 const ZENITH = new THREE.Color('#5d97d6');
 const HORIZON = new THREE.Color('#f4d8a8');
 export const FOG_COLOR = new THREE.Color('#bfc59c');
+export const HEMI = { sky: new THREE.Color('#b9d3ff'), ground: new THREE.Color('#4d5a2c'), intensity: 1.25 };
 
 /** Late-afternoon golden light: warm sun with soft shadows, sky/ground hemisphere fill, haze. */
 export function createLighting(scene, renderer) {
   scene.fog = new THREE.Fog(FOG_COLOR, 20, 78);
 
-  const hemi = new THREE.HemisphereLight('#b9d3ff', '#4d5a2c', 1.25);
+  const hemi = new THREE.HemisphereLight(HEMI.sky, HEMI.ground, HEMI.intensity);
   scene.add(hemi);
 
   const sun = new THREE.DirectionalLight('#ffd9a6', 3.2);

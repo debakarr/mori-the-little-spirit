@@ -41,7 +41,8 @@
       const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 50);
 
       const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-      const mori = createMori(await loader.loadAsync('../public/models/mori.glb'));
+      const form = new URLSearchParams(location.search).get('form') === 'fox' ? 'fox' : 'mori'; // ?form=fox
+      const mori = createMori(await loader.loadAsync(`../public/models/${form}.glb`));
       scene.add(mori.object);
 
       const $ = (id) => document.getElementById(id);

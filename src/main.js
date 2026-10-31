@@ -5,7 +5,7 @@ import { loadModels } from './world/assetKit.js';
 import { createWorld } from './world/createWorld.js';
 import { SPAWN, streamDistance, WATER_Y } from './world/terrain.js';
 import { PhysicsWorld } from './physics/PhysicsWorld.js';
-import { createMori } from './player/Mori.js';
+import { Forms } from './player/Forms.js';
 import { PlayerController } from './player/PlayerController.js';
 import { FollowCamera } from './camera/FollowCamera.js';
 import { EnvironmentEffects } from './effects/EnvironmentEffects.js';
@@ -32,8 +32,9 @@ async function boot() {
   const world = createWorld({ scene, renderer, models });
   physics.addStatic(world.colliders);
 
-  const mori = createMori(models.mori);
-  scene.add(mori.object, mori.shadow);
+  const pixelScale = renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan((camera.fov * Math.PI) / 360));
+  const mori = new Forms({ spirit: models.mori, fox: models.fox }, { pixelScale });
+  scene.add(mori.object, mori.shadow, mori.fx.group);
   const spawn = SPAWN.clone();
   spawn.y = world.heightAt(spawn.x, spawn.z);
 
@@ -42,7 +43,7 @@ async function boot() {
   const effects = new EnvironmentEffects(scene, {
     heightAt: world.heightAt,
     mushroomCenter: world.mushroomCenter,
-    pixelScale: renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan((camera.fov * Math.PI) / 360)),
+    pixelScale,
   });
   const player = new PlayerController({
     physics, input, mori, spawn, facing: Math.PI,
@@ -52,12 +53,19 @@ async function boot() {
       onBounce: () => { audio.whoosh(true); audio.chime(880); },
     },
   });
-  mori.animator.onStep = (run) => audio.step(player.position.y < WATER_Y + 0.05, run);
+  mori.onStep = (run) => audio.step(player.position.y < WATER_Y + 0.05, run);
+  mori.onChange = (phase) => {
+    if (phase === 'start') audio.whoosh(false);
+    else { audio.whoosh(true); audio.chime(990); }
+  };
   const follow = new FollowCamera(camera, physics, world.heightAt);
   follow.snap(player.position);
   const post = createPostFX(renderer, scene, camera);
 
   input.on('KeyM', () => audio.toggleMute());
+  input.on('KeyQ', () => started && mori.transform());
+  input.on('Digit1', () => started && mori.transform('spirit'));
+  input.on('Digit2', () => started && mori.transform('fox'));
   input.on('KeyH', () => ui.toggleHints());
 
   let started = false;
@@ -83,18 +91,22 @@ async function boot() {
       physics.step();
       follow.update(dt, player.position, player.yaw, player.speed, input.consumeLook(), input.consumeWheel());
     } else {
-      // idle orbit behind the title screen
+      // idle orbit behind the title screen (step physics here too, or the ground isn't in the
+      // query pipeline yet and Mori sinks through it before the game starts)
       player.update(dt, follow.yaw);
+      physics.step();
       follow.update(dt, player.position, player.yaw, 0, { dx: -0.35, dy: 0 }, 0);
     }
     globalUniforms.uPlayer.value.copy(player.position);
+    mori.update(dt);
+    mori.updateFX();
 
     // contact shadow follows the ground under Mori, fading with height
     const g = physics.groundBelow(player.position.x, player.position.y + 0.3, player.position.z) ?? player.position.y;
     mori.shadow.position.set(player.position.x, g + 0.02, player.position.z);
     const h = player.position.y - g;
     mori.shadow.material.opacity = THREE.MathUtils.clamp(1 - h * 0.8, 0.15, 1);
-    mori.shadow.scale.setScalar(1 + h * 0.3);
+    mori.shadow.scale.setScalar((1 + h * 0.3) * mori.stats.shadow);
 
     // nearest interactable within reach
     let near = null;
