@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp, damp, smoothstep } from '../core/noise.js';
+import { clamp, damp, lerp, smoothstep } from '../core/noise.js';
 
 const PIVOT_HEIGHT = 0.62;
 
@@ -8,6 +8,7 @@ const PIVOT_HEIGHT = 0.62;
  * jumps don't jolt the view), obstruction handling that first rises over low obstacles
  * (bushes, rocks) and only then pulls in (fast in, slow out),
  * gentle auto-follow behind Mori after a moment without mouse input, and a ground clamp.
+ * While the bird flies the view pulls back and widens, and follows height changes more softly.
  */
 export class FollowCamera {
   constructor(camera, physics, heightAt) {
@@ -22,6 +23,8 @@ export class FollowCamera {
     this.pivot = new THREE.Vector3();
     this.idle = 0;
     this.lift = 0;
+    this.fly = 0; // 0..1 while the bird is in the air: a wider, farther view
+    this.sensitivity = 1;
     this.baseFov = camera.fov;
     this._dir = new THREE.Vector3();
     this._look = new THREE.Vector3();
@@ -32,13 +35,14 @@ export class FollowCamera {
     this.update(1 / 60, target, 0, 0, { dx: 0, dy: 0 }, 0);
   }
 
-  update(dt, target, playerYaw, speed, look, wheel) {
+  update(dt, target, playerYaw, speed, look, wheel, flying = false) {
+    this.fly += ((flying ? 1 : 0) - this.fly) * damp(flying ? 1.5 : 1, dt);
     if (look.dx || look.dy) this.idle = 0;
     else this.idle += dt;
-    this.yaw -= look.dx * 0.0024;
-    this.pitch = clamp(this.pitch + look.dy * 0.002, -0.3, 1.2);
+    this.yaw -= look.dx * 0.0024 * this.sensitivity;
+    this.pitch = clamp(this.pitch + look.dy * 0.002 * this.sensitivity, -0.3, 1.2);
     if (wheel) this.targetDistance = clamp(this.targetDistance + wheel * 0.0025, 1.8, 7);
-    this.distance += (this.targetDistance - this.distance) * damp(8, dt);
+    this.distance += (this.targetDistance + this.fly * 1.6 - this.distance) * damp(8, dt);
 
     // drift behind Mori while exploring and the mouse is resting
     if (this.idle > 1.4 && speed > 0.6) {
@@ -47,7 +51,7 @@ export class FollowCamera {
       this.yaw += d * damp(0.9 * smoothstep(0.6, 4, speed), dt);
     }
 
-    const kx = damp(11, dt), ky = damp(5, dt);
+    const kx = damp(11, dt), ky = damp(lerp(5, 3, this.fly), dt);
     this.pivot.x += (target.x - this.pivot.x) * kx;
     this.pivot.z += (target.z - this.pivot.z) * kx;
     this.pivot.y += (target.y + PIVOT_HEIGHT - this.pivot.y) * ky;
@@ -74,7 +78,7 @@ export class FollowCamera {
     if (cam.position.y < floor) cam.position.y = floor;
     cam.lookAt(this._look.copy(this.pivot).add({ x: 0, y: 0.1, z: 0 }));
 
-    const fov = this.baseFov + smoothstep(2.5, 5, speed) * 5;
+    const fov = this.baseFov + smoothstep(2.5, 5, speed) * 5 + this.fly * 7;
     if (Math.abs(cam.fov - fov) > 0.01) {
       cam.fov += (fov - cam.fov) * damp(4, dt);
       cam.updateProjectionMatrix();

@@ -70,6 +70,7 @@ export class CharacterAnimator {
     this.tailYaw = new Spring(60, 6);
     this.lean = new Spring(80, 11);
     this.look = { yaw: 0, tYaw: 0, next: 2 };
+    this.lookTarget = null; // head yaw (radians, model space) toward a nearby point of interest
     this.onStep = null;
     this._lastStepSign = 1;
   }
@@ -83,6 +84,18 @@ export class CharacterAnimator {
   jump() {
     this.squash.vel += 2.2;
     this.ears.vel -= 3;
+  }
+
+  /** Sit down right away (resting on a rock or by the tree) instead of after a wait. */
+  sitNow() {
+    this.emote = null;
+    this.still = SIT_AFTER + 0.01;
+    this.actions.Sit?.reset().play();
+  }
+
+  /** Seconds Mori has been sitting still (drives the sleepy motes in main.js). */
+  get restTime() {
+    return Math.max(0, this.still - SIT_AFTER);
   }
 
   /** One-shot clip while standing still (e.g. 'Howl'); moving cancels it. */
@@ -159,11 +172,13 @@ export class CharacterAnimator {
     this._rootInv.copy(this.model.getWorldQuaternion(this._q)).invert();
 
     const L = this.look;
-    if ((L.next -= dt) < 0) {
+    if (this.lookTarget != null) L.tYaw = clamp(this.lookTarget, -0.9, 0.9); // something interesting nearby
+    else if ((L.next -= dt) < 0) {
       L.next = 1.8 + Math.random() * 3.5;
       L.tYaw = (Math.random() - 0.5) * 0.9;
     }
-    L.yaw = lerp(L.yaw, L.tYaw * idle * (1 - this.emoteBlend), damp(3, dt));
+    const glance = this.lookTarget != null ? Math.max(idle, 0.6) : idle; // looks over even while walking past
+    L.yaw = lerp(L.yaw, L.tYaw * glance * (1 - this.emoteBlend), damp(3, dt));
     this.rot('Head', Y, L.yaw + clamp(s.yawRate * 0.07, -0.35, 0.35));
 
     const lean = this.lean.update(clamp(-s.yawRate * s.speed * 0.045, -0.3, 0.3) * ground, dt);

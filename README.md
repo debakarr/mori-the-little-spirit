@@ -1,6 +1,7 @@
-# Little Spirit — Whispers of the Grove (first playable)
+# Little Spirit — Whispers of the Grove
 
-A tiny cozy 3D clearing where you play Mori, a little forest spirit. Three.js + Rapier + Vite.
+A tiny cozy 3D clearing where you play Mori, a little forest spirit who can become a fox or a bird.
+No missions, no timers: walk, run, fly, perch, sit on a rock and watch the butterflies. Three.js + Rapier + Vite.
 
 ```bash
 npm install
@@ -8,17 +9,21 @@ npm run dev      # http://localhost:5173
 npm run build    # static site in dist/ (GitHub Pages: .github/workflows/deploy.yml)
 ```
 
-**Controls:** WASD move · mouse look (click to capture) · Space jump · Shift run · E interact · M sound · H hints · wheel zoom.
+**Controls:** WASD move · mouse look (click to capture) · Space jump · Shift run · 1 / 2 / 3 spirit, fox, bird (Q cycles) · E interact, sit, rest · Esc pause · M sound · H hints · wheel zoom.
+**Bird:** Space takes off and climbs (tap for a single wingbeat) · release to glide · C or Ctrl dives · Shift flies faster · touch down on anything (rocks, the lantern roofs, the top of the ancient tree) to perch.
+
+The title menu has New Game, Continue (when a save exists), Settings (master and music volume, mouse sensitivity, graphics quality) and Credits. Settings and one save slot (position, facing, form; written every few seconds and on pause) live in the browser's localStorage.
 
 ## Code map
 
 | Path | What |
 |---|---|
-| `src/main.js` | boot, game loop, interaction prompts |
-| `src/world/` | terrain + stream (`terrain.js`; `water.js`: caustics by area-ratio splatting, sun glints and depth absorption, adapted from [Ultra-Water](https://github.com/Humpalumps/Ultra-Water), MIT), light/sky (`lighting.js`), grass + leaf fringe (`vegetation.js`), asset placement and static batching (`createWorld.js`, `assetKit.js`) |
-| `src/player/` | Rapier character controller, clip-based animation (AnimationMixer + procedural lean/tail/ears), Mori model setup, anime cel shading + ink outline (`toonMaterial.js`), forms and the change between them (`Forms.js`: Q / 1 / 2) |
-| `src/camera/FollowCamera.js` | third-person orbit camera with collision |
-| `src/effects/` | fireflies/spores/leaves/god rays, bloom + grade |
+| `src/main.js` | boot, game loop, pause and save, interaction prompts, seats, Mori's glances and dozing |
+| `src/world/` | terrain + stream (`terrain.js`; `water.js`: caustics by area-ratio splatting, sun glints and depth absorption, adapted from [Ultra-Water](https://github.com/Humpalumps/Ultra-Water), MIT), light/sky (`lighting.js`), grass + leaf fringe (`vegetation.js`), asset placement and static batching (`createWorld.js`, `assetKit.js`), the surrounding forest and clearing dressing from the MegaKit as instanced meshes with wind (`megakit.js`) |
+| `src/player/` | Rapier character controller with bird flight (`PlayerController.js`), clip-based animation (`CharacterAnimator.js`: AnimationMixer + procedural lean/tail/ears; `BirdAnimator.js`: hop, flap/glide blend, pitch and bank), Mori model setup, anime cel shading + ink outline (`toonMaterial.js`), forms and the change between them (`Forms.js`) |
+| `src/camera/FollowCamera.js` | third-person orbit camera with collision; pulls back and widens in flight |
+| `src/effects/` | fireflies/spores/leaves/god rays, butterflies that come to circle Mori (`Butterflies.js`), bloom + grade |
+| `src/ui/ControlsOverlay.js`, `src/core/Storage.js` | title / pause / settings / credits menus, form HUD, hints; settings and the save slot |
 | `src/audio/Ambience.js` | Web Audio mix: calm music, birds-and-wind and a stream loop that swells near the water (CC0 tracks below), plus synthesized steps and chimes |
 
 ## Asset pipeline (Blender 5.2)
@@ -32,6 +37,8 @@ npm run assets   # rebuild every runtime model headless
 - `tools/blender/prepare_mori_new.py -- --unrigged art/mesh2motion/mori_unrigged.glb` — the painted Mori sculpt (`mori-new.glb`, 2M tris) → 40k tris, 2K textures and an emissive map pulled from the painted cyan.
 - `tools/blender/rig_mori_mesh2motion.py` — rigs that mesh with [mesh2motion](https://app.mesh2motion.org/)'s fox skeleton and animates it with its fox clip library (CC0, `art/mesh2motion/fox-animations.glb`): the skeleton is fitted in the fox's Sit pose (the sculpt sits), clips are retargeted onto a crouched chibi stance with feet kept on the ground → `mori.glb` (Idle, Idle Alert, Walk, Run, Sit, Howl, Fall, Jump, Sneak). Skin weights come from `art/mesh2motion/mori_arp_weights.npz` when present, and the mesh gets smoothed normals for the cel shading (`toon_mori.py`).
 - `tools/blender/prepare_fox.py` + `rig_mori_mesh2motion.py -- --form fox` — the fox form (`fox-mori.glb`, painted) → `fox.glb`: same skeleton and clips, bound in the template's standing rest pose.
+- `tools/decode_glb.mjs` + `tools/blender/prepare_bird.py` + `rig_mori_mesh2motion.py -- --form bird` — the bird form (`mori-bird.glb`, painted; meshopt-compressed, so it is decoded to `art/blend/` first, which Blender's importer needs) → `bird.glb`: mesh2motion's bird skeleton and clips (CC0, `art/mesh2motion/bird-animations.glb`: Idle, Walk, Flap, Glide), its joints fitted to the upright chibi bird with the wings mapped along their span; flight clips are not foot-pinned.
+- `tools/blender/prepare_megakit.py` — Quaternius' [Stylized Nature MegaKit](https://quaternius.itch.io/stylized-nature-megakit) (CC0; download steps in `art/megakit_src/README.md`) → `megakit.glb`: 28 trees, bushes, ferns, flowers, rocks and pebbles in one file with shared materials, smaller textures, the autumn-red leaf variant swapped for the tintable mask, and the kit's AO vertex colour softened.
 - `tools/blender/arp_weights_mori.py` — run in a live Blender with [Auto-Rig Pro](https://lucky3d.fr/auto-rig-pro/doc/index.html) (`python3 tools/blender/mcp_run.py --file tools/blender/arp_weights_mori.py`): fits ARP's dog rig to Mori, binds a watertight voxel copy with ARP's heat map (the raw sculpt's overlapping fur shells defeat bone heat) and writes those weights, mapped onto the game skeleton, to `mori_arp_weights.npz`.
 - `tools/blender/toon_mori.py` — smoothed normals for the game's cel shading, plus a Blender look-dev preview (Shader-to-RGB ramp, rim, inverted-hull outline).
 - `tools/anim-preview.html` — dev-only animation preview (speed slider, emotes, fixed camera): `http://localhost:5173/tools/anim-preview.html`.
@@ -44,6 +51,18 @@ npm run assets   # rebuild every runtime model headless
   [blender-agent-skills](https://github.com/EL4CTEO/blender-skills) scripts (installed in `.claude/skills/`):
   voxel remesh + sculpt detail → procedural Cycles materials → UV → decimate → bake BC/N/AO/R (ORM) → QA → web GLB.
 - `tools/blender/mcp_run.py "<expr>"` runs any build step inside a live Blender session through the Blender MCP add-on (port 9876).
+
+## Asset credits
+
+- Forest trees, plants, rocks: [Stylized Nature MegaKit](https://quaternius.com/packs/stylizednaturemegakit.html) by Quaternius (CC0)
+- Fox and bird skeletons and animation clips: [Mesh2Motion](https://github.com/scottpetrovic/mesh2motion-app) by Scott Petrovic (CC0)
+
+## Dev log
+
+- **Forms:** spirit and fox (mesh2motion fox rig, Auto-Rig Pro weights for the spirit), then the bird (mesh2motion bird rig) with a real flight controller: takeoff, climb, glide, dive, soft ceiling, perching on any surface; the ancient tree's upper crown is solid so flights go under it or land on top rather than through a wall of leaves.
+- **World:** the Blender-built background trees were replaced by MegaKit trees, undergrowth and rocks drawn as instanced meshes (~44 draw calls); the clearing got ferns, flower clumps, clover, bank plants and pebbles. Steady 60 fps in the dev browser at 1.5× pixel ratio.
+- **Presentation:** title menu with Continue, settings (volumes, sensitivity, quality: Low drops bloom and sun shadows and renders at 0.8× pixel ratio), pause on Esc or when pointer lock is released, form HUD, a flight-controls toast, butterflies, seats on two rocks and by the tree, Mori glancing at nearby things and dozing after a long rest.
+- **Known gaps:** the fox still uses distance weights (no Auto-Rig Pro pass yet); the bird's idle folds the wings into narrow spikes because the template wing has a much longer chord than Mori's.
 
 ## Audio credits
 

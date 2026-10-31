@@ -6,3 +6,6 @@ art/textures/
 art/blend/
 __pycache__/
 *.blend1
+# third-party download (Quaternius Stylized Nature MegaKit, CC0): see art/megakit_src/README.md
+art/megakit_src/*
+!art/megakit_src/README.md

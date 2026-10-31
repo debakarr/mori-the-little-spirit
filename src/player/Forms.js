@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import { smoothstep } from '../core/noise.js';
 import { createMori } from './Mori.js';
 
-/** Movement per form (the fox is the runner and jumper); glow scales the painted emissive (the fox's
- * whole flame tail is painted cyan, so it needs less to read the same). */
+/** Movement per form (the fox is the runner and jumper, the bird hops on the ground and flies); glow
+ * scales the painted emissive (the fox's whole flame tail is painted cyan, so it needs less to read the same).
+ * fly: { cruise, fast } horizontal flight speeds (PlayerController). */
 const FORMS = {
   spirit: { walk: 2.3, run: 4.9, jump: 5.5, shadow: 1, glow: 1 },
   fox: { walk: 2.9, run: 7.2, jump: 6.6, shadow: 1.35, glow: 0.45 },
+  bird: { walk: 1.4, run: 2.4, jump: 4.6, shadow: 0.85, glow: 0.7, fly: { cruise: 4.6, fast: 7.5 } },
 };
-const ORDER = ['spirit', 'fox'];
+export const ORDER = ['spirit', 'fox', 'bird'];
 const DURATION = 1.25; // seconds for a whole change
 const SWAP = 0.48;     // share of DURATION when the new body takes over
 
@@ -33,6 +35,7 @@ export class Forms {
     this.fx = new ChangeFX(pixelScale);
     this.change = null; // { from, to, t, swapped }
     this.onChange = null;
+    this.airborne = false; // set by PlayerController: the incoming bird body starts mid-flap
     this._glow = 2.5;
   }
 
@@ -50,11 +53,19 @@ export class Forms {
     this.body.setGlow(v * this.stats.glow);
   }
 
+  /** Switch bodies with no change effect (loading a save). */
+  setForm(name) {
+    if (!this.bodies[name] || this.change) return;
+    for (const [k, b] of Object.entries(this.bodies)) b.object.visible = k === name;
+    this.name = name;
+    this.body.setGlow(this._glow * this.stats.glow);
+  }
+
   /** Change to `name` (or the next form); ignored mid-change or when already there. */
   transform(name = ORDER[(ORDER.indexOf(this.name) + 1) % ORDER.length]) {
     if (this.change || name === this.name || !this.bodies[name]) return false;
     this.change = { from: this.name, to: name, t: 0, swapped: false };
-    this.bodies[this.name].animator.land(7); // crouch into it
+    if (!this.airborne) this.bodies[this.name].animator.land(7); // crouch into it
     this.onChange?.('start', name);
     return true;
   }
@@ -86,7 +97,7 @@ export class Forms {
       this.change = null;
     }
     // the incoming body idles (unseen) until it takes over, so it appears settled
-    if (!c.swapped) to.animator.update(dt, { speed: 0, runBlend: 0, grounded: true, vy: 0, yawRate: 0, accel: 0 });
+    if (!c.swapped) to.animator.update(dt, { speed: 0, runBlend: 0, grounded: !this.airborne, vy: 0, yawRate: 0, accel: 0, flying: this.airborne && !!FORMS[c.to].fly, flap: 1 });
   }
 
   updateFX() {

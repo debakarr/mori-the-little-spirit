@@ -116,6 +116,66 @@ if FORM == "fox":
             f"Back_Leg_Ankle_{side}": (f"Back_Leg_Foot_{side}", 0.03),
             f"Back_Leg_Foot_{side}": (f"Back_Leg_Tip_{side}", 0.025),
         }
+NO_GROUND = set()  # clips whose feet are not pinned to the floor (flight)
+if FORM == "bird":
+    import prepare_bird  # noqa: E402  (shares the bird's normalised -> game space)
+    ANIMS = os.path.join(ROOT, "art", "mesh2motion", "bird-animations.glb")
+    MESH = os.path.join(ROOT, "art", "mesh2motion", "bird_unrigged.glb")
+    OUT = os.path.join(ROOT, "public", "models", "bird.glb")
+    ARP_WEIGHTS = ""
+    BIND_CLIP, UNFOLD, SWING = None, {}, {}
+    CLIPS = ["Idle", "Walk", "Flap", "Glide"]
+    NO_GROUND = {"Flap", "Glide"}
+    FEET = ["Toes_tip_L", "Toes_tip_R", "Foot_L", "Foot_R"]
+    SWAY = 0.15
+    G = prepare_bird.to_game
+    # Upright chibi bird (prepare_bird.py normalised coords: wingspan 1, faces -Y, feet at (0, -0.05, -0.335)),
+    # read off its ortho renders: big head with a feather tuft over a round body, wings spread level
+    # with the shoulders and rising to the tips, a fan tail sweeping down behind.
+    N = {
+        "root": (0, -0.05, -0.335), "hips": (0, 0.0, -0.22), "spine_0": (0, -0.02, -0.17),
+        "spine_1": (0, -0.04, -0.12), "spine_2": (0, -0.06, -0.08), "spine_3": (0, -0.08, -0.05),
+        "head": (0, -0.1, -0.02), "mouth_upper": (0, -0.27, -0.02), "mouth_upper_tip": (0, -0.32, -0.03),
+        "mouth_lower": (0, -0.26, -0.05), "mouth_lower_tip": (0, -0.3, -0.05),
+        "tail_1": (0, 0.08, -0.2), "tail_2": (0, 0.15, -0.25), "tail_3": (0, 0.22, -0.3), "tail_tip": (0, 0.29, -0.34),
+        "UpperLeg_L": (0.04, -0.03, -0.24), "LowerLeg_L": (0.05, -0.04, -0.28), "AnkleLeg_L": (0.05, -0.05, -0.31),
+        "Foot_L": (0.05, -0.06, -0.33), "Toes_L": (0.05, -0.09, -0.335), "Toes_tip_L": (0.05, -0.12, -0.335),
+    }
+
+    def wing(p):
+        """Template wing joint -> the bird's wing: same layout along the span, a much shorter chord."""
+        u = (abs(p[0]) - 0.104) / 1.556
+        return (math.copysign(0.13 + u * 0.36, p[0]), -0.12 + (p[1] + 0.25) * 0.12, -0.1 + u * 0.26)
+
+    _t = bpy.data.objects
+    for o in list(_t):
+        _t.remove(o)
+    bpy.ops.import_scene.gltf(filepath=ANIMS)
+    for b in next(o for o in _t if o.type == "ARMATURE").data.bones:
+        if b.name.startswith("wing") and b.name.endswith("_L"):
+            N[b.name] = wing(b.head_local)
+            if b.name == "wing_tip_L":
+                N["wing_end_L"] = wing(b.tail_local)
+    for a in list(bpy.data.actions):  # the template is imported again below; keep only that copy's clips
+        bpy.data.actions.remove(a)
+    J = {k: G(v) for k, v in N.items() if k != "wing_end_L"}
+    s = prepare_bird.BIRD_HEIGHT / prepare_bird.NORM_HEIGHT
+    BIRD_SEG = {
+        "hips": ("spine_1", 0.11 * s), "spine_1": ("spine_3", 0.09 * s),
+        "head": ((G((0, -0.14, -0.02)), G((0, -0.06, 0.24))), 0.15 * s),
+        "mouth_upper": ((G((0, -0.26, -0.02)), G((0, -0.33, -0.03))), 0.02 * s),
+        "tail_1": ("tail_2", 0.05 * s), "tail_2": ("tail_3", 0.05 * s), "tail_3": ("tail_tip", 0.05 * s),
+        "tail_tip": (G((0, 0.33, -0.37)), 0.04 * s),
+    }
+    for side, sx in (("L", 1), ("R", -1)):
+        end = N["wing_end_L"]
+        BIRD_SEG |= {
+            f"wing_1_{side}": (f"wing_3_{side}", 0.035 * s), f"wing_3_{side}": (f"wing_4_{side}", 0.035 * s),
+            f"wing_4_{side}": (f"wing_5_{side}", 0.035 * s),
+            f"wing_5_{side}": (G((end[0] * sx, end[1], end[2])), 0.035 * s),
+            f"LowerLeg_{side}": (f"AnkleLeg_{side}", 0.015 * s), f"AnkleLeg_{side}": (f"Foot_{side}", 0.015 * s),
+            f"Foot_{side}": (f"Toes_tip_{side}", 0.015 * s),
+        }
 for k in [k for k in J if k.endswith("_L")]:
     x, y, z = J[k]
     J[k[:-2] + "_R"] = (-x, y, z)
@@ -143,6 +203,8 @@ for side, sx in (("L", 1), ("R", -1)):
 
 if FORM == "fox":
     SEG = FOX_SEG
+elif FORM == "bird":
+    SEG = BIRD_SEG
 
 for o in list(bpy.data.objects):
     bpy.data.objects.remove(o)
@@ -176,7 +238,7 @@ else:
     SIT = {b.name: b.matrix_local.copy() for b in fox.data.bones}
 
 # ---- 1. Mori's rig: fox Sit orientations, joints at Mori's landmarks
-rig = bpy.data.objects.new("MoriRig" if FORM == "spirit" else "FoxRig", bpy.data.armatures.new("MoriRig"))
+rig = bpy.data.objects.new({"spirit": "MoriRig", "fox": "FoxRig", "bird": "BirdRig"}[FORM], bpy.data.armatures.new("MoriRig"))
 sc.collection.objects.link(rig)
 bpy.context.view_layer.objects.active = rig
 bpy.ops.object.mode_set(mode="EDIT")
@@ -228,7 +290,8 @@ for clip in CLIPS:
                     delta.negate()
                 q = Quaternion().slerp(delta, next((v for k, v in SWING.items() if n.startswith(k)), 1.0)) @ STANCE[n]
             W[n] = Matrix.LocRotScale(pos, q, None)
-        dz = floor - min(min(W[f].translation.z, (W[f] @ Vector((0, rig.data.bones[f].length, 0))).z) for f in FEET)
+        dz = 0 if clip in NO_GROUND else \
+            floor - min(min(W[f].translation.z, (W[f] @ Vector((0, rig.data.bones[f].length, 0))).z) for f in FEET)
         for n in ORDER:
             if n != "root":
                 W[n] = Matrix.Translation((0, 0, dz)) @ W[n]
@@ -316,7 +379,7 @@ if DEBUG:  # weight colours in the bind pose, then frames of the main clips from
 
     for v in ("front", "side", "back"):
         shot(f"weights_{v}", v, "VERTEX")
-    for clip in ("Idle", "Walk", "Run", "Jump", "Sit", "Howl"):
+    for clip in [c for c in ("Idle", "Walk", "Run", "Jump", "Sit", "Howl", "Flap", "Glide") if c in CLIPS]:
         act = bpy.data.actions[clip]
         rig.animation_data.action = act
         f0, f1 = act.frame_range

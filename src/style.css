@@ -41,3 +41,56 @@ body { font-family: 'Nunito', system-ui, sans-serif; color: var(--ink); user-sel
 .ls-prompt .ls-key { border-radius: 999px; min-width: 24px; line-height: 20px; box-shadow: 0 0 12px rgba(143, 243, 255, 0.6); }
 
 .ls-corner { position: absolute; right: 18px; bottom: 18px; font-size: 12px; opacity: 0.55; }
+
+/* ---- menus */
+.ls-start { cursor: default; }
+.ls-cta.hidden, .ls-menu.hidden { display: none; }
+.ls-menu { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 38px; }
+.ls-menu button {
+  min-width: 220px; padding: 10px 22px; border: 1px solid rgba(143, 243, 255, 0.28); border-radius: 999px;
+  background: rgba(10, 18, 16, 0.45); backdrop-filter: blur(6px); color: var(--ink); cursor: pointer;
+  font: 600 14px 'Nunito', system-ui, sans-serif; letter-spacing: 0.16em; text-transform: uppercase;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.ls-menu button:hover, .ls-menu button:focus-visible {
+  outline: none; background: rgba(20, 40, 38, 0.65); border-color: rgba(143, 243, 255, 0.7);
+  box-shadow: 0 0 18px rgba(143, 243, 255, 0.25);
+}
+.ls-start.dimmed > :not(.ls-menu), .ls-start.dimmed .ls-menu, .ls-pause.dimmed .ls-menu { opacity: 0; pointer-events: none; }
+.ls-pause {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(6, 10, 9, 0.55); backdrop-filter: blur(3px); pointer-events: auto; transition: opacity 0.35s ease;
+}
+.ls-pause.hidden, .ls-panel.hidden { opacity: 0; pointer-events: none; }
+.ls-panel-title { font-family: 'Cormorant Garamond', serif; font-size: clamp(32px, 4vw, 46px); text-shadow: 0 0 18px rgba(143, 243, 255, 0.3); }
+.ls-panel {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100% - 32px));
+  display: flex; flex-direction: column; gap: 16px; padding: 26px 28px; border-radius: 18px;
+  background: rgba(10, 18, 16, 0.72); backdrop-filter: blur(10px); border: 1px solid rgba(143, 243, 255, 0.18);
+  pointer-events: auto; transition: opacity 0.3s ease;
+}
+.ls-panel label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; letter-spacing: 0.06em; opacity: 0.92; }
+.ls-panel input[type=range] { accent-color: var(--glow); width: 100%; }
+.ls-panel select { padding: 6px 10px; border-radius: 8px; background: rgba(246, 241, 228, 0.92); color: #1d2420; font: 600 13px 'Nunito', sans-serif; }
+.ls-panel .ls-menu { margin-top: 6px; }
+.ls-credits { font-size: 13px; line-height: 1.55; display: flex; flex-direction: column; gap: 10px; opacity: 0.9; }
+
+/* ---- HUD */
+.ls-forms { position: absolute; right: 22px; top: 20px; display: flex; gap: 8px; transition: opacity 1s ease; }
+.ls-forms.hidden { opacity: 0; }
+.ls-form {
+  display: flex; align-items: center; gap: 6px; padding: 5px 11px 5px 5px; border-radius: 999px; font-size: 12px;
+  background: var(--panel); backdrop-filter: blur(6px); opacity: 0.55; transition: opacity 0.3s ease, box-shadow 0.3s ease;
+}
+.ls-form .ls-key { border-radius: 999px; }
+.ls-form.active { opacity: 1; box-shadow: 0 0 14px rgba(143, 243, 255, 0.45); }
+.ls-toast {
+  position: absolute; right: 22px; top: 60px; padding: 6px 12px; border-radius: 10px; font-size: 12px;
+  background: var(--panel); backdrop-filter: blur(6px); opacity: 0; transition: opacity 0.5s ease; max-width: calc(100% - 44px);
+}
+.ls-toast.visible { opacity: 1; }
+@media (max-width: 640px) {
+  .ls-hints { left: 16px; bottom: 16px; max-width: calc(100% - 32px); }
+  .ls-forms { right: 16px; top: 14px; }
+  .ls-toast { right: 16px; top: 52px; }
+}

@@ -1,11 +1,11 @@
 const AUDIO_URL = `${import.meta.env.BASE_URL}audio/`;
+const MUSIC_LEVEL = 0.9; // music loop gain at full music volume
 // CC0 loops from OpenGameArt, prepared by tools/blender/prepare_audio.py
 const LOOPS = {
   music: 'music_forest.mp3', // "Forest Ambience" by TinyWorlds
   birds: 'ambience_birds.mp3', // "Birds and Wind - Ambient" by Spring Spring
   water: 'stream_water.mp3', // "Sea and river wave sounds" (Vistula) by RandomMind
 };
-const MASTER = 0.9;
 
 /**
  * Ambience with Web Audio: a calm music loop, a birds-and-wind bed and a water loop that swells
@@ -16,6 +16,8 @@ export class Ambience {
   constructor() {
     this.ctx = null;
     this.muted = false;
+    this.volume = { master: 0.9, music: 0.6 };
+    this.ducked = false;
     this.files = Object.fromEntries(Object.entries(LOOPS).map(([k, f]) => [k, fetch(AUDIO_URL + f).then((r) => r.arrayBuffer())]));
   }
 
@@ -24,11 +26,11 @@ export class Ambience {
     const ctx = (this.ctx = new AudioContext());
     this.master = ctx.createGain();
     this.master.gain.value = 0.0;
-    this.master.gain.linearRampToValueAtTime(MASTER, ctx.currentTime + 4);
+    this.master.gain.linearRampToValueAtTime(this.targetGain(), ctx.currentTime + 4);
     this.master.connect(ctx.destination);
     this.noise = this.makeNoise(4);
     this.gains = {};
-    const level = { music: 0.55, birds: 0.35, water: 0 };
+    const level = { music: MUSIC_LEVEL * this.volume.music, birds: 0.35, water: 0 };
     for (const [k, file] of Object.entries(this.files)) {
       const g = (this.gains[k] = ctx.createGain());
       g.gain.value = level[k];
@@ -67,7 +69,29 @@ export class Ambience {
   toggleMute() {
     if (!this.ctx) return;
     this.muted = !this.muted;
-    this.master.gain.setTargetAtTime(this.muted ? 0 : MASTER, this.ctx.currentTime, 0.2);
+    this.applyGain();
+  }
+
+  targetGain() {
+    return this.muted ? 0 : this.volume.master * (this.ducked ? 0.45 : 1);
+  }
+
+  applyGain() {
+    if (!this.ctx) return;
+    this.master.gain.setTargetAtTime(this.targetGain(), this.ctx.currentTime, 0.2);
+    this.gains.music.gain.setTargetAtTime(MUSIC_LEVEL * this.volume.music, this.ctx.currentTime, 0.2);
+  }
+
+  /** Settings: master and music volume, 0..1. */
+  setVolume({ master, music }) {
+    this.volume = { master, music };
+    this.applyGain();
+  }
+
+  /** Quieter while the pause menu is open. */
+  duck(on) {
+    this.ducked = on;
+    this.applyGain();
   }
 
   /** streamDist in metres from the listener; t in seconds. */

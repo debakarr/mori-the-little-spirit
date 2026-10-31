@@ -7,13 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "assets": "blender -b --factory-startup --python tools/blender/prepare_mori_new.py -- --unrigged art/mesh2motion/mori_unrigged.glb && blender -b --factory-startup --python tools/blender/rig_mori_mesh2motion.py && blender -b --factory-startup --python tools/blender/prepare_fox.py && blender -b --factory-startup --python tools/blender/rig_mori_mesh2motion.py -- --form fox && blender -b --factory-startup --python tools/blender/prepare_mushroom_new.py && blender -b --factory-startup --python tools/blender/prepare_grass_patch.py && blender -b --factory-startup --python tools/blender/prepare_stream_pool.py && blender -b --factory-startup --python tools/blender/build_heroes.py"
+    "assets": "blender -b --factory-startup --python tools/blender/prepare_mori_new.py -- --unrigged art/mesh2motion/mori_unrigged.glb && blender -b --factory-startup --python tools/blender/rig_mori_mesh2motion.py && blender -b --factory-startup --python tools/blender/prepare_fox.py && blender -b --factory-startup --python tools/blender/rig_mori_mesh2motion.py -- --form fox && node tools/decode_glb.mjs mori-bird.glb art/blend/mori-bird_decoded.glb && blender -b --factory-startup --python tools/blender/prepare_bird.py && blender -b --factory-startup --python tools/blender/rig_mori_mesh2motion.py -- --form bird && blender -b --factory-startup --python tools/blender/prepare_megakit.py && blender -b --factory-startup --python tools/blender/prepare_mushroom_new.py && blender -b --factory-startup --python tools/blender/prepare_grass_patch.py && blender -b --factory-startup --python tools/blender/prepare_stream_pool.py && blender -b --factory-startup --python tools/blender/build_heroes.py"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
     "three": "^0.187.0"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "meshoptimizer": "^0.22.0",
     "vite": "^8.3.5"
   }
 }

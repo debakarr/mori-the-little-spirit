@@ -32,6 +32,7 @@ export function createPostFX(renderer, scene, camera) {
   composer.addPass(new OutputPass());
   return {
     composer,
+    bloom,
     /** CSS pixels; the composer applies the renderer's pixel ratio itself. */
     setSize(w, h) {
       composer.setSize(w, h);

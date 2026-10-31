@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { blobShadowTexture } from '../core/textures.js';
 import { CharacterAnimator } from './CharacterAnimator.js';
+import { BirdAnimator } from './BirdAnimator.js';
 import { addOutline, toonMaterial } from './toonMaterial.js';
 
 /**
- * One of Mori's bodies (spirit: public/models/mori.glb, fox: fox.glb), rigged and animated with
- * mesh2motion's fox skeleton and clips (tools/blender/rig_mori_mesh2motion.py). It is cel shaded with
+ * One of Mori's bodies (spirit: public/models/mori.glb, fox: fox.glb, bird: bird.glb), rigged and
+ * animated with mesh2motion's fox (or bird) skeleton and clips (tools/blender/rig_mori_mesh2motion.py). It is cel shaded with
  * an ink outline (toonMaterial.js); its glow comes from an emissive map extracted from the painted cyan.
  */
 export function createMori(gltf, name = 'Mori') {
@@ -35,7 +36,8 @@ export function createMori(gltf, name = 'Mori') {
   const setGlow = (v) => { material.emissiveIntensity = v; };
   setGlow(2.5);
 
-  const animator = new CharacterAnimator(model, visual, gltf.animations);
+  const bird = gltf.animations.some((c) => c.name === 'Flap');
+  const animator = bird ? new BirdAnimator(model, visual, gltf.animations) : new CharacterAnimator(model, visual, gltf.animations);
 
   const shadow = new THREE.Mesh(
     new THREE.PlaneGeometry(0.9, 0.9).rotateX(-Math.PI / 2),
@@ -44,7 +46,7 @@ export function createMori(gltf, name = 'Mori') {
   shadow.renderOrder = 1;
 
   let tailBone = null;
-  model.traverse((o) => { if (o.isBone && o.name === 'Tail_Tip') tailBone = o; });
+  model.traverse((o) => { if (o.isBone && (o.name === 'Tail_Tip' || o.name === 'tail_tip')) tailBone = o; });
 
   /** Form-change look: flash to spirit light, dissolve away (0..1 each); the outline hides meanwhile. */
   const setChange = (flash, dissolve) => {

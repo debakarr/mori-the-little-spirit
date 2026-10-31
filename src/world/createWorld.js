@@ -1,16 +1,18 @@
 import * as THREE from 'three';
-import { rng } from '../core/noise.js';
+import { rng, fbm2 } from '../core/noise.js';
 import { patchMaterial } from '../core/shaders.js';
 import { softDotTexture } from '../core/textures.js';
 import { createLighting } from './lighting.js';
 import {
-  createTerrain, terrainColliderData, heightAt, streamDistance, TREE_POS, TREE_BASE_Y, SPAWN, WATER_Y,
+  createTerrain, terrainColliderData, heightAt, streamDistance, pathDistance, grassDensity, TREE_POS, TREE_BASE_Y, SPAWN, WATER_Y,
 } from './terrain.js';
 import { createStream } from './water.js';
 import { createGrass, createLeafFringe } from './vegetation.js';
 import { createMaterialLibrary, prepareScene, place, collectHelpers, batchStatic } from './assetKit.js';
+import { placeKit } from './megakit.js';
 
 const BOUNDARY_RADIUS = 12.9; // ~26 m playable clearing; the bush ring sits just outside
+const CROWN_SOLID_ABOVE = 6.4; // metres over the tree's base: the crown's collider starts above the lantern ropes
 
 // [node, x, z, yaw, scale, grass-clear radius]
 const ROCKS = [
@@ -31,6 +33,13 @@ const POOL = { x: 7.2, z: 4.7, yaw: 1.4, scale: 3.8 };
 // painted grass/flower patches (tools/blender/prepare_grass_patch.py): [x, z, scale, yaw]
 const GRASS_PATCHES = [[-3.6, 3.2, 2.8, 0.4], [4.2, 7.4, 2.4, 2.1], [-9.0, 2.8, 2.6, 4.2], [1.4, -8.6, 2.5, 1.0], [-4.6, -6.6, 2.2, 5.3], [9.6, -3.0, 2.0, 3.3]];
 const LILY_PATCHES = [[-4.4, 5.6, 7], [3.4, 8.6, 6], [-9.6, 0.9, 5], [3.9, -2.1, 5], [-5.3, -2.4, 4], [6.0, -8.0, 5], [-2.7, -2.3, 3], [1.4, -2.6, 3], [-1.8, 11.2, 4]];
+// MegaKit (src/world/megakit.js) picks for the forest; undergrowth is [model, min scale, max scale]
+const KIT_TREES = ['CommonTree_1', 'CommonTree_2', 'CommonTree_3', 'CommonTree_4', 'CommonTree_5'];
+const KIT_PINES = ['Pine_1', 'Pine_2', 'Pine_3', 'Pine_5'];
+const UNDERGROWTH = [
+  ['Bush_Common', 0.7, 1.0], ['Bush_Common_Flowers', 0.6, 0.85], ['Fern_1', 0.85, 1.25], ['Fern_1', 0.85, 1.25],
+  ['Plant_1_Big', 0.6, 0.9], ['Plant_1', 0.8, 1.1],
+];
 const MUSHROOMS = [[-6.5, -1.3, 1.7, 0.3], [-5.0, -0.1, 0.8, 2.2], [-7.4, -2.8, 0.6, 4.0]]; // each is a 3-mushroom cluster
 
 export function createWorld({ scene, renderer, models }) {
@@ -46,7 +55,9 @@ export function createWorld({ scene, renderer, models }) {
 
   // ---- ancient tree, facing the spawn point
   const tree = prepareScene(models.ancient_tree.scene, lib).getObjectByName('AncientTree');
-  place(tree, staticRoot, { x: TREE_POS.x, y: TREE_BASE_Y, z: TREE_POS.z, yaw: toFace(TREE_POS.x, TREE_POS.z, SPAWN.x, SPAWN.z), fringe: true });
+  const treeObj = place(tree, staticRoot, { x: TREE_POS.x, y: TREE_BASE_Y, z: TREE_POS.z, yaw: toFace(TREE_POS.x, TREE_POS.z, SPAWN.x, SPAWN.z), fringe: true });
+  const treeRoofs = [];
+  treeObj.traverse((o) => { if (/^Lantern_\d+_Roof$/.test(o.name)) treeRoofs.push(o); });
   blockers.push({ x: TREE_POS.x, z: TREE_POS.z + 2.4, r: 1.0 });
 
   // ---- rocks + stepping stones
@@ -95,17 +106,39 @@ export function createWorld({ scene, renderer, models }) {
     }
   }
 
-  // ---- background forest + bushes
+  // ---- background forest (MegaKit trees and undergrowth) + the Blender bush ring
   const kit = prepareScene(models.forest_kit.scene, lib);
-  const treeA = kit.getObjectByName('tree_a'), treeB = kit.getObjectByName('tree_b');
   const bushes = ['bush_a', 'bush_b', 'bush_c'].map((n) => kit.getObjectByName(n));
+  const pick = (list) => list[Math.floor(r() * list.length)];
+  const forest = [];
   for (let i = 0; i < 120; i++) {
     const a = (i / 120) * Math.PI * 2 + r() * 0.06;
     const rad = 15.5 + r() * 22 + (i % 3) * 2;
     const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
     if (streamDistance(x, z) < 3.2) continue;
-    place(r() < 0.55 ? treeA : treeB, staticRoot, { x, z, y: heightAt(x, z) - 0.2, yaw: r() * 6.28, scale: 0.85 + r() * 0.5 });
+    forest.push({ model: pick(r() < 0.7 ? KIT_TREES : KIT_PINES), x, z, y: heightAt(x, z) - 0.15, yaw: r() * 6.28, scale: 1.2 + r() * 0.45 });
   }
+  for (let i = 0; i < 7; i++) { // old giants standing over the far canopy
+    const a = (i / 7) * Math.PI * 2 + 0.35 + r() * 0.3;
+    const x = Math.cos(a) * (31 + r() * 5), z = Math.sin(a) * (31 + r() * 5);
+    if (streamDistance(x, z) < 6) continue;
+    forest.push({ model: pick(['TwistedTree_1', 'TwistedTree_3']), x, z, y: heightAt(x, z) - 0.2, yaw: r() * 6.28, scale: 0.95 + r() * 0.25 });
+  }
+  for (let i = 0; i < 170; i++) { // undergrowth between the trunks, densest just outside the clearing
+    const a = r() * Math.PI * 2;
+    const rad = 13.2 + Math.pow(r(), 1.6) * 14;
+    const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+    if (streamDistance(x, z) < 1.6) continue;
+    const [model, s0, s1] = pick(UNDERGROWTH);
+    forest.push({ model, x, z, y: heightAt(x, z) - 0.04, yaw: r() * 6.28, scale: s0 + r() * (s1 - s0) });
+  }
+  for (let i = 0; i < 9; i++) {
+    const a = r() * Math.PI * 2, rad = 14.5 + r() * 7;
+    const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+    if (streamDistance(x, z) < 2.5) continue;
+    forest.push({ model: pick(['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3']), x, z, y: heightAt(x, z) - 0.1, yaw: r() * 6.28, scale: 0.45 + r() * 0.35 });
+  }
+  placeKit(models.megakit, forest, scene);
   const bushObjects = [];
   for (let i = 0; i < 52; i++) {
     const a = (i / 52) * Math.PI * 2 + r() * 0.1;
@@ -118,6 +151,43 @@ export function createWorld({ scene, renderer, models }) {
     bushObjects.push(place(bushes[0], staticRoot, { x, z, y: heightAt(x, z) - 0.05, yaw: x * 7.1, scale: s, fringe: true }));
     blockers.push({ x, z, r: 1.2 * s });
   }
+
+  // ---- clearing dressing from the MegaKit: ferns at rock feet, flower clumps, clover, bank plants,
+  //      pebbles along the water and tall tufts toward the rim. Mori brushes through all of it.
+  const free = (x, z, pad = 0) => !blockers.some((b) => (x - b.x) ** 2 + (z - b.z) ** 2 < (b.r + pad) ** 2)
+    && Math.hypot(x - SPAWN.x, z - SPAWN.z) > 2.2 && pathDistance(x, z) > 0.9 && Math.hypot(x, z) < 12.4;
+  const dressing = [];
+  const scatter = (n, tries, test, make) => {
+    for (let i = 0, k = 0; i < tries && k < n; i++) {
+      const x = (r() - 0.5) * 25, z = (r() - 0.5) * 25;
+      if (!test(x, z)) continue;
+      dressing.push({ x, z, yaw: r() * 6.28, ...make(x, z) });
+      k++;
+    }
+  };
+  for (const [, rx, rz, , , clear] of ROCKS) {
+    for (let i = 0; i < 2; i++) {
+      const a = r() * 6.28, d = clear + 0.25 + r() * 0.5;
+      const x = rx + Math.cos(a) * d, z = rz + Math.sin(a) * d;
+      if (streamDistance(x, z) > 1.6 && free(x, z)) dressing.push({ model: 'Fern_1', x, z, yaw: r() * 6.28, scale: 0.38 + r() * 0.14 });
+    }
+  }
+  scatter(16, 600, (x, z) => grassDensity(x, z) > 0.5 && free(x, z, 0.4) && fbm2(x * 0.3, z * 0.3) > 0.5,
+    () => ({ model: r() < 0.5 ? 'Flower_3_Group' : 'Flower_4_Group', scale: 0.2 + r() * 0.07 }));
+  scatter(22, 600, (x, z) => grassDensity(x, z) > 0.35 && free(x, z, 0.2), () => ({ model: 'Clover_2', scale: 0.3 + r() * 0.12 }));
+  scatter(12, 900, (x, z) => { const d = streamDistance(x, z); return d > 1.5 && d < 2.3 && free(x, z, 0.3); },
+    () => ({ model: r() < 0.6 ? 'Plant_7_Big' : 'Plant_1', scale: 0.4 + r() * 0.15 }));
+  scatter(26, 1200, (x, z) => { const d = streamDistance(x, z); return d > 0.9 && d < 1.6 && free(x, z); },
+    () => ({ model: pick(['Pebble_Round_1', 'Pebble_Round_2', 'Pebble_Round_3']), scale: 0.5 + r() * 0.5 }));
+  scatter(36, 1500, (x, z) => Math.hypot(x, z) > 10 && streamDistance(x, z) > 1.8 && free(x, z),
+    () => ({ model: 'Grass_Wispy_Tall', scale: 0.3 + r() * 0.15 }));
+  scatter(7, 900, (x, z) => Math.hypot(x - TREE_POS.x, z - TREE_POS.z) < 4.2 && free(x, z),
+    () => ({ model: 'Mushroom_Common', scale: 0.35 + r() * 0.2 }));
+  for (const d of dressing) {
+    d.y = heightAt(d.x, d.z) - 0.02;
+    if (d.model === 'Fern_1') blockers.push({ x: d.x, z: d.z, r: 0.5 * d.scale });
+  }
+  placeKit(models.megakit, dressing, scene, { castShadow: false });
 
   // ---- glow mushrooms (painted model, tools/blender/prepare_mushroom_new.py; kept unbatched so
   //      the emissive glow can pulse). Clone the node: meshopt stores dequantization on it.
@@ -190,16 +260,40 @@ export function createWorld({ scene, renderer, models }) {
     key: it.name.includes('door') ? 'door' : 'rune',
   }));
   interactables.push({ position: new THREE.Vector3(-6.0, heightAt(-6, -0.6) + 0.5, -0.6), label: 'Wake the mushrooms', key: 'mushrooms' });
+  // places to sit: flat rock tops (their height comes from the physics ground, main.js) and a nook by
+  // the ancient tree's roots, beside the door, looking out over the clearing
+  const door = new THREE.Vector2(SPAWN.x - TREE_POS.x, SPAWN.z - TREE_POS.z).normalize();
+  const nook = { x: TREE_POS.x + door.x * 2.0 + door.y * 1.3, z: TREE_POS.z + door.y * 2.0 - door.x * 1.3 };
+  for (const s of [
+    { x: -8.4, z: 5.0, label: 'Sit on the rock' },
+    { x: 2.4, z: -10.6, label: 'Sit on the rock' },
+    { x: nook.x, z: nook.z, label: 'Rest by the old tree' },
+  ]) {
+    interactables.push({ position: new THREE.Vector3(s.x, heightAt(s.x, s.z), s.z), label: s.label, key: 'seat', seat: true, yaw: toFace(s.x, s.z, 0, 2) });
+  }
 
   // ---- collision: terrain, prop hulls, an invisible ring keeping Mori in the clearing
   const colliders = [{ type: 'trimesh', ...terrainColliderData() }];
   for (const h of hulls) colliders.push({ type: 'hull', points: h.points, bounce: h.bounce });
   // bushes: Mori brushes through them; the camera rises over them (FollowCamera)
   for (const b of bushObjects) colliders.push({ type: 'hull', points: meshPoints(b, 0.8), cameraOnly: true });
+  // the ancient tree's crown is solid above the lantern branches: the bird flies under it or lands on
+  // top (inside the leaves the camera would see nothing but leaves), and the lantern roofs are perches
+  for (const c of helpers.canopies) {
+    if (new THREE.Box3().setFromObject(c).min.y > 2) colliders.push({ type: 'hull', points: crownPoints(c, TREE_BASE_Y + CROWN_SOLID_ABOVE) });
+  }
+  const perches = [];
+  for (const roof of treeRoofs) {
+    const top = new THREE.Box3().setFromObject(roof);
+    const p = top.getCenter(new THREE.Vector3()).setY(top.max.y);
+    colliders.push({ type: 'cuboid', center: p.clone().add({ x: 0, y: -0.05, z: 0 }), half: [0.2, 0.05, 0.2], yaw: 0, cameraIgnore: true });
+    perches.push(p);
+  }
   for (let i = 0; i < 36; i++) {
     const a = (i / 36) * Math.PI * 2;
     const x = Math.cos(a) * BOUNDARY_RADIUS, z = Math.sin(a) * BOUNDARY_RADIUS;
-    colliders.push({ type: 'cuboid', center: new THREE.Vector3(x, heightAt(x, z) + 2, z), half: [0.4, 4, 1.4], yaw: -a, cameraIgnore: true });
+    // tall enough that the bird can't fly over (PlayerController's ceiling is lower)
+    colliders.push({ type: 'cuboid', center: new THREE.Vector3(x, heightAt(x, z) + 7, z), half: [0.4, 9, 1.4], yaw: -a, cameraIgnore: true });
   }
 
   const glowMats = { door: lib.LS_SpiritGlow, rune: lib.LS_Rune };
@@ -222,7 +316,8 @@ export function createWorld({ scene, renderer, models }) {
   }
 
   return {
-    sun, colliders, interactables, update, heightAt, stream,
+    sun, colliders, interactables, update, heightAt, stream, perches,
+    flowerSpots: LILY_PATCHES.map(([x, z]) => new THREE.Vector3(x, heightAt(x, z), z)),
     mushroomCenter: new THREE.Vector3(-6.3, heightAt(-6.3, -1.2) + 0.6, -1.2),
     trigger(key) { pulses[key] = 1; },
   };
@@ -242,6 +337,23 @@ function meshPoints(root, shrink = 1) {
       pts.push(v.x, v.y, v.z);
     }
   });
+  return new Float32Array(pts);
+}
+
+/** World-space points of a crown mesh above `minY`, pulled in a little so the hull hugs the leaves. */
+function crownPoints(mesh, minY) {
+  mesh.updateMatrixWorld(true);
+  const pos = mesh.geometry.attributes.position;
+  const c = new THREE.Box3().setFromObject(mesh).getCenter(new THREE.Vector3());
+  const pts = [];
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += 2) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+    if (v.y < minY) continue;
+    v.x = c.x + (v.x - c.x) * 0.9;
+    v.z = c.z + (v.z - c.z) * 0.9;
+    pts.push(v.x, v.y, v.z);
+  }
   return new Float32Array(pts);
 }
 
